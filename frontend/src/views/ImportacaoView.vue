@@ -36,17 +36,17 @@
             </ul>
             <div class="d-flex flex-wrap gap-2 align-items-center">
               <BButton
-                href="/api/importacoes/modelos/oferta"
+                :href="urlDaApi('/importacoes/modelos/oferta')"
                 variant="outline-primary"
                 size="sm"
                 download
               >
                 Modelo da oferta
               </BButton>
-              <a href="/api/importacoes/modelos/salas" class="small" download
+              <a :href="urlDaApi('/importacoes/modelos/salas')" class="small" download
                 >Modelo de salas (opcional)</a
               >
-              <a href="/api/importacoes/modelos/professores" class="small" download
+              <a :href="urlDaApi('/importacoes/modelos/professores')" class="small" download
                 >Modelo de professores (opcional)</a
               >
             </div>
@@ -205,7 +205,7 @@ import {
   BSpinner,
   BTable,
 } from 'bootstrap-vue-next'
-import { http, mensagemDeErro } from '@/api/http'
+import { http, mensagemDeErro, urlDaApi } from '@/api/http'
 import { usePeriodoStore } from '@/stores/periodo'
 import RelatorioArquivo from '@/components/RelatorioArquivo.vue'
 

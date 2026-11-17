@@ -119,7 +119,7 @@ import {
   BRow,
   BSpinner,
 } from 'bootstrap-vue-next'
-import { http, mensagemDeErro } from '@/api/http'
+import { http, mensagemDeErro, urlDaApi } from '@/api/http'
 import GradeSemanal from '@/components/GradeSemanal.vue'
 import GradeLista from '@/components/GradeLista.vue'
 import { formatarDataHora } from '@/utils/formato'
@@ -232,7 +232,9 @@ async function baixarPdf() {
   erro.value = ''
   try {
     await baixarArquivo(
-      `/api/publico/periodos/${periodoId.value}/pdf?tipo=${tipo.value}&recurso=${recursoId.value}`
+      urlDaApi(
+        `/publico/periodos/${periodoId.value}/pdf?tipo=${tipo.value}&recurso=${recursoId.value}`
+      )
     )
   } catch (e) {
     erro.value = e.message

@@ -12,6 +12,8 @@ export default defineConfig(({ mode }) => {
   const apiUrl = process.env.API_URL || env.API_URL || 'http://localhost:3333'
 
   return {
+    // Pasta em que a interface é publicada (frontend/.env.production: /gradeif/).
+    base: env.VITE_BASE || '/',
     plugins: [vue()],
     resolve: {
       alias: { '@': fileURLToPath(new URL('./src', import.meta.url)) },
