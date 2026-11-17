@@ -6,7 +6,7 @@
 import { Router } from 'express'
 import { z } from 'zod'
 import { validar } from '../middlewares/validar.js'
-import { exigirPerfil, PERFIS } from '../middlewares/autenticacao.js'
+import { exigirEditorDoHorario, exigirPerfil, PERFIS } from '../middlewares/autenticacao.js'
 import { gerenciador } from '../geracao/gerenciador.js'
 
 const rotas = Router({ mergeParams: true })
@@ -31,13 +31,23 @@ rotas.get('/', validar({ params: Periodo }), (req, res) => {
   res.json({ job: gerenciador.obter(req.params.periodoId) })
 })
 
-rotas.post('/', validar({ params: Periodo, body: Iniciar }), async (req, res) => {
-  res.status(202).json({ job: await gerenciador.iniciar(req.params.periodoId, req.body) })
-})
+// Gerar e cancelar a geração de um horário: só o editor dele.
+rotas.post(
+  '/',
+  validar({ params: Periodo, body: Iniciar }),
+  exigirEditorDoHorario((req) => req.body.versaoId),
+  async (req, res) => {
+    res.status(202).json({ job: await gerenciador.iniciar(req.params.periodoId, req.body) })
+  }
+)
 
 rotas.post(
   '/cancelar',
   validar({ params: Periodo, body: z.object({ salvar: z.boolean().default(false) }) }),
+  exigirEditorDoHorario((req) => {
+    const job = gerenciador.obter(req.params.periodoId)
+    return job?.ativo ? job.opcoes.versaoId : null
+  }),
   (req, res) => {
     res.json({ job: gerenciador.cancelar(req.params.periodoId, req.body) })
   }

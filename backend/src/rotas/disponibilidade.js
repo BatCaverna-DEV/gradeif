@@ -9,7 +9,7 @@
 import { Router } from 'express'
 import { z } from 'zod'
 import { validar } from '../middlewares/validar.js'
-import { exigirLogin } from '../middlewares/autenticacao.js'
+import { exigirEditorDoHorario, exigirLogin } from '../middlewares/autenticacao.js'
 import * as servico from '../servicos/disponibilidade.js'
 
 const rotas = Router({ mergeParams: true })
@@ -32,6 +32,8 @@ const Itens = z.object({
 })
 
 const versaoDa = (req) => req.validatedQuery.versao ?? null
+// A disponibilidade de um horário (?versao) só é alterada pelo editor dele.
+const doEditor = exigirEditorDoHorario(versaoDa)
 
 rotas.get('/professores', validar({ params: Periodo, query: Escopo }), async (req, res) => {
   if (versaoDa(req)) servico.verificarAcesso(req.session.usuario, 'professor', 0, versaoDa(req))
@@ -49,6 +51,7 @@ rotas.get('/:tipo/:recursoId', validar({ params: Recurso, query: Escopo }), asyn
 rotas.put(
   '/:tipo/:recursoId',
   validar({ params: Recurso, query: Escopo, body: Itens }),
+  doEditor,
   async (req, res) => {
     const { periodoId, tipo, recursoId } = req.params
     servico.verificarAcesso(req.session.usuario, tipo, recursoId, versaoDa(req))
@@ -67,6 +70,7 @@ rotas.put(
 rotas.post(
   '/:tipo/:recursoId/usar-padrao',
   validar({ params: Recurso, query: z.object({ versao: id }) }),
+  doEditor,
   async (req, res) => {
     const { periodoId, tipo, recursoId } = req.params
     servico.verificarAcesso(req.session.usuario, tipo, recursoId, versaoDa(req))

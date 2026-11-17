@@ -39,12 +39,17 @@
           v-if="!versao.publicada"
           :to="{ name: 'editor-versao', params: { id } }"
           class="btn btn-sm btn-primary"
-          >Editar</RouterLink
+          >{{ auth.ehEditorDe(versao) ? 'Editar' : 'Abrir no editor' }}</RouterLink
         >
       </div>
     </header>
 
     <BAlert :model-value="!!erro" variant="danger">{{ erro }}</BAlert>
+    <EditorDoHorario
+      v-if="versao && !versao.publicada"
+      :versao="versao"
+      @atualizado="(v) => (versao = v)"
+    />
     <div v-if="carregando" class="text-center py-5"><BSpinner label="Carregando" /></div>
 
     <template v-else-if="versao && gradeHoraria">
@@ -178,7 +183,9 @@ import {
   BSpinner,
 } from 'bootstrap-vue-next'
 import { http, mensagemDeErro } from '@/api/http'
+import { useAuthStore } from '@/stores/auth'
 import { usePeriodoStore } from '@/stores/periodo'
+import EditorDoHorario from '@/components/EditorDoHorario.vue'
 import GradeSemanal from '@/components/GradeSemanal.vue'
 import PainelViolacoes from '@/components/PainelViolacoes.vue'
 import { DIAS, formatarDataHora, formatarNumero } from '@/utils/formato'
@@ -198,6 +205,7 @@ const router = useRouter()
 const carregando = ref(false)
 const erro = ref('')
 const versao = ref(null)
+const auth = useAuthStore()
 const aulas = ref([])
 const avaliacao = ref(null)
 const gradeHoraria = ref(null)

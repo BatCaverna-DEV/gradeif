@@ -10,6 +10,7 @@ import { avaliarGrade } from '../core/index.js'
 import { corDoProfessor } from '../core/cores.js'
 import { ErroConflito, ErroNaoEncontrado } from '../erros.js'
 import { montarProblema } from './problema.js'
+import { comEditor, paraEditor } from './editorDoHorario.js'
 
 const json = (v) => (typeof v === 'string' ? JSON.parse(v) : (v ?? null))
 const LOTE = 500
@@ -18,6 +19,8 @@ function paraVersao(v) {
   return {
     id: v.id,
     nome: v.nome,
+    // Só o editor altera o horário; null = sem editor (pode ser assumido).
+    editor: paraEditor(v),
     origem: v.origem,
     semente: v.semente,
     pontuacao: v.pontuacao == null ? null : Number(v.pontuacao),
@@ -38,7 +41,7 @@ function paraVersao(v) {
 }
 
 function consultaVersoes(periodoId) {
-  return db('versao_grade as v')
+  return comEditor(db('versao_grade as v'))
     .where('v.periodo_id', periodoId)
     .select(
       'v.*',
@@ -147,15 +150,16 @@ export async function copiarDisponibilidade(trx, periodoId, destinoId, origemId 
 
 // Cria um horário com nome. Sem copiarDe, começa sem aulas, com as atribuições da
 // oferta e a disponibilidade padrão do período; com copiarDe, é uma cópia daquele
-// horário (atribuições, disponibilidade e aulas).
-export async function criarVersao(periodoId, { nome, copiarDe = null }) {
-  if (copiarDe) return duplicarVersao(periodoId, copiarDe, nome)
+// horário (atribuições, disponibilidade e aulas). editorId: quem cria vira o editor.
+export async function criarVersao(periodoId, { nome, copiarDe = null }, editorId = null) {
+  if (copiarDe) return duplicarVersao(periodoId, copiarDe, nome, editorId)
   const periodo = await db('periodo_letivo').where({ id: periodoId }).first('id')
   if (!periodo) throw new ErroNaoEncontrado('Período letivo não encontrado')
   const id = await db.transaction(async (trx) => {
     const [versaoId] = await trx('versao_grade').insert({
       periodo_id: periodoId,
       nome,
+      editor_id: editorId,
       origem: 'manual',
       detalhes: JSON.stringify({ criadoDe: 'oferta' }),
     })
@@ -319,12 +323,14 @@ export async function renomearVersao(periodoId, id, nome) {
   return resumoVersao(periodoId, id)
 }
 
-export async function duplicarVersao(periodoId, id, nome) {
+// A cópia é de quem duplicou (editorId), qualquer que seja o editor do original.
+export async function duplicarVersao(periodoId, id, nome, editorId = null) {
   const original = await buscarVersao(periodoId, id)
   const novoId = await db.transaction(async (trx) => {
     const [versaoId] = await trx('versao_grade').insert({
       periodo_id: periodoId,
       nome: nome ?? `${original.nome} (cópia)`.slice(0, 80),
+      editor_id: editorId,
       origem: 'manual',
       semente: original.semente,
       pontuacao: original.pontuacao,

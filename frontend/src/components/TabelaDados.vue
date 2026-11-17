@@ -78,6 +78,8 @@ const props = defineProps({
   placeholder: { type: String, default: 'Buscar...' },
   textoVazio: { type: String, default: 'Nenhum registro. Use a importação de planilhas.' },
   porPagina: { type: Number, default: 25 },
+  // Sem as ações de corrigir e excluir (horário de outro editor, publicado...).
+  somenteLeitura: { type: Boolean, default: false },
 })
 
 const emit = defineEmits(['editar', 'excluir'])
@@ -91,10 +93,11 @@ const slotsDeCelula = computed(() =>
   Object.fromEntries(Object.entries(slots).filter(([nome]) => nome.startsWith('cell(')))
 )
 
-const camposComAcoes = computed(() => [
-  ...props.campos,
-  { key: 'acoes', label: '', thClass: 'text-end', tdClass: 'text-nowrap' },
-])
+const camposComAcoes = computed(() =>
+  props.somenteLeitura
+    ? props.campos
+    : [...props.campos, { key: 'acoes', label: '', thClass: 'text-end', tdClass: 'text-nowrap' }]
+)
 
 function textoDeBusca(item) {
   return normalizar(

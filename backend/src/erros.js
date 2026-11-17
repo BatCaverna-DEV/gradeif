@@ -21,8 +21,8 @@ export class ErroNaoAutenticado extends ErroHttp {
 }
 
 export class ErroProibido extends ErroHttp {
-  constructor(mensagem = 'Sem permissão para esta ação') {
-    super(403, mensagem)
+  constructor(mensagem = 'Sem permissão para esta ação', detalhes) {
+    super(403, mensagem, detalhes)
   }
 }
 

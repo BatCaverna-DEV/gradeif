@@ -9,6 +9,8 @@ export const useAuthStore = defineStore('auth', () => {
 
   const autenticado = computed(() => !!usuario.value)
   const ehGestor = computed(() => usuario.value?.perfil === 'gestor')
+  // Só o editor do horário (versao.editor) altera; os outros gestores visualizam.
+  const ehEditorDe = (versao) => !!versao?.editor && versao.editor.id === usuario.value?.id
 
   definirAoNaoAutenticado(() => {
     usuario.value = null
@@ -42,5 +44,5 @@ export const useAuthStore = defineStore('auth', () => {
     }
   }
 
-  return { usuario, autenticado, ehGestor, carregar, entrar, sair }
+  return { usuario, autenticado, ehGestor, ehEditorDe, carregar, entrar, sair }
 })

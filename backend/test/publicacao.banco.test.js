@@ -11,11 +11,12 @@ import { GESTOR, criarGestor, criarPeriodo, limparBanco } from './ajuda/banco.js
 import { importarTudo } from './ajuda/planilhas.js'
 
 const banco = inject('bancoDisponivel')
+let gestorId // editor dos horários criados nos testes
 
 // Gera uma versão (1 s) e devolve o id.
 async function gerarVersao(periodoId, nome) {
   const g = new Gerenciador()
-  const horario = await criarVersao(periodoId, { nome })
+  const horario = await criarVersao(periodoId, { nome }, gestorId)
   return new Promise((resolver, rejeitar) => {
     const sair = g.assinar(periodoId, (job) => {
       if (job.ativo) return
@@ -45,7 +46,7 @@ describe.skipIf(!banco)('publicação e consulta (Fase 5)', () => {
     await limparBanco()
     ;({ periodoId } = await criarPeriodo())
     await importarTudo(periodoId)
-    await criarGestor()
+    gestorId = await criarGestor()
     app = criarApp()
     gestor = request.agent(app)
     await gestor.post('/api/auth/login').send(GESTOR).expect(200)
