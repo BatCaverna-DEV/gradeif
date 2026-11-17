@@ -4,7 +4,10 @@
 //   atribuicao.versao_id = v   → atribuição só do horário v; mudar aqui não afeta
 //                                a oferta nem os outros horários.
 // A unicidade (turma, disciplina) passa a valer dentro de cada escopo. Como o
-// MariaDB não compara NULL em índice único, o escopo é uma coluna calculada.
+// banco não compara NULL em índice único, o escopo é uma coluna calculada.
+// A coluna é VIRTUAL (calculada na leitura, com índice): funciona no MariaDB e no
+// MySQL. PERSISTENT só o MariaDB aceita, e o MySQL recusa STORED quando a coluna
+// base (versao_id) tem chave estrangeira com ON DELETE CASCADE.
 // Versões já existentes recebem cópias das atribuições da oferta, e as aulas delas
 // passam a apontar para as cópias.
 
@@ -19,7 +22,7 @@ export async function up(knex) {
       .after('periodo_id')
   })
   await knex.raw(
-    'ALTER TABLE atribuicao ADD COLUMN escopo INT UNSIGNED AS (IFNULL(versao_id, 0)) PERSISTENT AFTER versao_id'
+    'ALTER TABLE atribuicao ADD COLUMN escopo INT UNSIGNED AS (IFNULL(versao_id, 0)) VIRTUAL AFTER versao_id'
   )
   // O índice novo começa por turma_id, então continua servindo à chave estrangeira.
   await knex.schema.alterTable('atribuicao', (t) => {

@@ -4,6 +4,9 @@
 //   versao_id = v  → só do horário v; o gestor ajusta por proposta.
 // A unicidade (recurso, tempo de aula) vale dentro de cada escopo. Horários já
 // existentes recebem uma cópia do padrão do período.
+// Coluna calculada VIRTUAL (com índice): funciona no MariaDB e no MySQL. PERSISTENT
+// só o MariaDB aceita, e o MySQL recusa STORED quando a coluna base (versao_id) tem
+// chave estrangeira com ON DELETE CASCADE.
 
 export async function up(knex) {
   await knex.schema.alterTable('indisponibilidade', (t) => {
@@ -16,7 +19,7 @@ export async function up(knex) {
       .after('periodo_id')
   })
   await knex.raw(
-    'ALTER TABLE indisponibilidade ADD COLUMN escopo INT UNSIGNED AS (IFNULL(versao_id, 0)) PERSISTENT AFTER versao_id'
+    'ALTER TABLE indisponibilidade ADD COLUMN escopo INT UNSIGNED AS (IFNULL(versao_id, 0)) VIRTUAL AFTER versao_id'
   )
   await knex.schema.alterTable('indisponibilidade', (t) => {
     t.unique(['tipo_recurso', 'recurso_id', 'horario_id', 'escopo'], {
