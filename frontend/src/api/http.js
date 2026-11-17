@@ -1,6 +1,13 @@
 // Cliente HTTP mínimo sobre fetch. Envia o cookie de sessão e converte
 // respostas de erro da API ({ erro, detalhes }) em ErroApi.
 
+// Prefixo da API. Em desenvolvimento é /api (o Vite encaminha para API_URL); no
+// build para o Apache vem de VITE_API_BASE (frontend/.env.production).
+export const API_BASE = (import.meta.env.VITE_API_BASE || '/api').replace(/\/+$/, '')
+
+// Endereço completo de uma rota da API, para links, downloads e EventSource.
+export const urlDaApi = (caminho) => `${API_BASE}${caminho}`
+
 export class ErroApi extends Error {
   constructor(status, mensagem, detalhes) {
     super(mensagem)
@@ -31,7 +38,7 @@ async function requisitar(metodo, url, corpo) {
 
   let resposta
   try {
-    resposta = await fetch(`/api${url}`, opcoes)
+    resposta = await fetch(urlDaApi(url), opcoes)
   } catch {
     throw new ErroApi(0, 'Não foi possível contatar o servidor')
   }

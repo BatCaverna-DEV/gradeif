@@ -125,6 +125,22 @@ sudo apt install -y certbot python3-certbot-apache && sudo certbot --apache -d h
 
 Para conferir o SSE, inicie uma geração pela tela e veja o progresso andar. Se a barra só mexer no fim, o Apache está segurando a resposta: confira o `flushpackets=on` e se o `mod_deflate` respeita o `no-gzip`.
 
+### 5.1. Interface numa pasta do Apache (batcaverna.site)
+
+Alternativa ao modo acima: a interface fica em `https://batcaverna.site/gradeif/` como arquivos estáticos do Apache, e a API em `https://batcaverna.site/api-gradeif`, pelo proxy reverso que já existe no vhost (`ProxyPass "/api-gradeif" "http://localhost:3008"`).
+
+Os caminhos do build estão em `frontend/.env.production` (`VITE_BASE=/gradeif/` e `VITE_API_BASE=/api-gradeif/api`). O build leva `frontend/public/.htaccess`, que entrega o `index.html` em qualquer rota do Vue Router, devolve 404 para arquivo de `assets/` que não existe, deixa o `index.html` sem cache e os assets com cache longo. O vhost precisa de `AllowOverride All` na pasta e dos módulos `rewrite` e `headers`.
+
+```bash
+cd /root/github/gradeif && git pull && npm ci && npm run build
+```
+
+```bash
+sudo mkdir -p /var/www/html/gradeif && sudo rsync -a --delete frontend/dist/ /var/www/html/gradeif/
+```
+
+O `rsync` copia também o `.htaccess` (arquivo oculto). Se a pasta mudar, ajuste o `VITE_BASE` e o `RewriteBase` do `.htaccess`. Nesse modo não use `FRONTEND_DIST` na API.
+
 ## 6. Atualização
 
 ```bash

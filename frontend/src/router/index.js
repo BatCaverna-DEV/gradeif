@@ -140,7 +140,8 @@ const routes = [
 ]
 
 const router = createRouter({
-  history: createWebHistory(),
+  // BASE_URL vem do "base" do Vite: / em desenvolvimento, /gradeif/ no build do Apache.
+  history: createWebHistory(import.meta.env.BASE_URL),
   routes,
 })
 

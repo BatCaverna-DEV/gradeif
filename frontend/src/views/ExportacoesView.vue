@@ -106,7 +106,7 @@
 import { computed, reactive, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { BAlert, BButton, BCard, BCol, BFormSelect, BRow, BSpinner } from 'bootstrap-vue-next'
-import { http, mensagemDeErro } from '@/api/http'
+import { http, mensagemDeErro, urlDaApi } from '@/api/http'
 import { usePeriodoStore } from '@/stores/periodo'
 import { baixarArquivo } from '@/utils/download'
 
@@ -147,7 +147,7 @@ const versaoAtual = computed(() => versoes.value.find((v) => v.id === versaoId.v
 const opcoesVersao = computed(() =>
   versoes.value.map((v) => ({ value: v.id, text: `${v.nome}${v.publicada ? ' (publicada)' : ''}` }))
 )
-const base = computed(() => `/api/periodos/${periodo.value?.id}/versoes/${versaoId.value}`)
+const base = computed(() => urlDaApi(`/periodos/${periodo.value?.id}/versoes/${versaoId.value}`))
 
 watch(
   () => periodo.value?.id,

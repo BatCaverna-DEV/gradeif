@@ -273,7 +273,7 @@ import {
   BRow,
   BSpinner,
 } from 'bootstrap-vue-next'
-import { http, mensagemDeErro } from '@/api/http'
+import { http, mensagemDeErro, urlDaApi } from '@/api/http'
 import { useAuthStore } from '@/stores/auth'
 import { usePeriodoStore } from '@/stores/periodo'
 import { formatarDuracao, formatarNumero } from '@/utils/formato'
@@ -337,7 +337,9 @@ const percentual = computed(() => {
 
 function abrirEventos(periodoId) {
   fecharEventos()
-  fonte = new EventSource(`/api/periodos/${periodoId}/geracao/eventos`, { withCredentials: true })
+  fonte = new EventSource(urlDaApi(`/periodos/${periodoId}/geracao/eventos`), {
+    withCredentials: true,
+  })
   fonte.addEventListener('job', (evento) => {
     conexao.value = 'aberta'
     const anterior = job.value

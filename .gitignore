@@ -19,6 +19,8 @@ coverage/
 .env
 .env.*
 !.env.example
+# Caminhos públicos do build da interface (sem segredos).
+!frontend/.env.production
 *.local
 
 # ---------- Logs ----------
