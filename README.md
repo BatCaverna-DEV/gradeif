@@ -61,6 +61,8 @@ npm run dev
 
 Sobe a API em `http://localhost:3333` e a interface em `http://localhost:5173`. O Vite encaminha `/api` para a API, então o cookie de sessão fica na mesma origem.
 
+Para a interface local usar outra API (por exemplo, a online), copie `frontend/.env.example` para `frontend/.env.local`, ajuste `API_URL` e suba só a interface com `npm run dev -w frontend`. Uma variável `API_URL` definida no terminal tem prioridade sobre o arquivo.
+
 | Comando                                     | O que faz                                                     |
 | ------------------------------------------- | ------------------------------------------------------------- |
 | `npm run dev`                               | API e interface juntas, com recarga automática                |
