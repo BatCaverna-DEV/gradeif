@@ -1,0 +1,24 @@
+{
+  "name": "@horarios/frontend",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Interface web do Sistema de Horários (Vue 3 + bootstrap-vue-next)",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "bootstrap": "^5.3.8",
+    "bootstrap-icons": "^1.13.1",
+    "bootstrap-vue-next": "^0.40.0",
+    "pinia": "^3.0.3",
+    "vue": "^3.5.22",
+    "vue-router": "^4.6.3"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-vue": "^6.0.1",
+    "vite": "^7.1.12"
+  }
+}

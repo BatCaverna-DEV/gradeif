@@ -1,0 +1,61 @@
+# ---------- Dependências ----------
+node_modules/
+
+# ---------- Builds e caches ----------
+# Interface compilada (gerada por "npm run build"; a API serve em produção).
+dist/
+dist-ssr/
+*.tsbuildinfo
+.eslintcache
+.cache/
+
+# ---------- Testes ----------
+coverage/
+.vitest/
+.nyc_output/
+
+# ---------- Variáveis de ambiente (segredos) ----------
+# Fica no Git só o modelo: backend/.env.example.
+.env
+.env.*
+!.env.example
+*.local
+
+# ---------- Logs ----------
+# PM2 grava em logs/ (ecosystem.config.cjs); o backup grava logs/backup.log.
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# ---------- Backups e dumps do banco ----------
+# Contêm dados pessoais (professores, e-mails, SIAPE): nunca no repositório.
+*.sql
+*.sql.gz
+*.dump
+backups/
+
+# ---------- Arquivos temporários ----------
+tmp/
+temp/
+*.tmp
+*.bak
+*.swp
+*~
+
+# ---------- Sistema operacional ----------
+.DS_Store
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# ---------- Editores e ferramentas ----------
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+.idea/
+*.sublime-workspace
+# Configuração local do Claude Code (permissões pessoais).
+.claude/settings.local.json
