@@ -10,11 +10,17 @@
 import { Router } from 'express'
 import { z } from 'zod'
 import { validar } from '../middlewares/validar.js'
-import { exigirPerfil, PERFIS } from '../middlewares/autenticacao.js'
+import { exigirEditorDoHorario, exigirPerfil, PERFIS } from '../middlewares/autenticacao.js'
 import * as servico from '../servicos/edicao.js'
 
 const rotas = Router({ mergeParams: true })
 rotas.use(exigirPerfil(PERFIS.GESTOR))
+// Consultar e simular: qualquer gestor. Alterar: só o editor do horário.
+rotas.use(
+  exigirEditorDoHorario((req) =>
+    req.method === 'GET' || req.path === '/simular' ? null : req.params.versaoId
+  )
+)
 
 const id = z.coerce.number().int().positive()
 const Versao = z.object({ periodoId: id, versaoId: id })

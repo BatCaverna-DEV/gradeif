@@ -35,12 +35,13 @@ describe.skipIf(!banco)('geração na interface (API)', () => {
   let periodoId
   let agente
   let app
+  let gestorId // editor dos horários criados nos testes
 
   beforeEach(async () => {
     await limparBanco()
     ;({ periodoId } = await criarPeriodo())
     await importarTudo(periodoId)
-    await criarGestor()
+    gestorId = await criarGestor()
     app = criarApp()
     agente = request.agent(app)
     await agente.post('/api/auth/login').send(GESTOR).expect(200)
@@ -111,7 +112,7 @@ describe.skipIf(!banco)('geração na interface (API)', () => {
       const g = new Gerenciador()
       const eventos = []
       g.assinar(periodoId, (j) => eventos.push(j.estado))
-      const horario = await criarVersao(periodoId, { nome: 'Primeira' })
+      const horario = await criarVersao(periodoId, { nome: 'Primeira' }, gestorId)
       expect(horario).toMatchObject({ totalAtribuicoes: 3, totalAulas: 0, origem: 'manual' })
       await g.iniciar(periodoId, { versaoId: horario.id, tempoLimiteSegundos: 1, semente: 'teste' })
       const job = await esperar(g, periodoId, terminou)
@@ -136,7 +137,7 @@ describe.skipIf(!banco)('geração na interface (API)', () => {
 
     it('recusa uma segunda geração no mesmo período e cancela descartando', async () => {
       const g = new Gerenciador()
-      const horario = await criarVersao(periodoId, { nome: 'H' })
+      const horario = await criarVersao(periodoId, { nome: 'H' }, gestorId)
       await g.iniciar(periodoId, { versaoId: horario.id, tempoLimiteSegundos: 60 })
       await expect(g.iniciar(periodoId, { versaoId: horario.id })).rejects.toThrow(
         'Já existe uma geração em andamento'
@@ -151,7 +152,7 @@ describe.skipIf(!banco)('geração na interface (API)', () => {
 
     it('ao encerrar com "salvar", grava a melhor solução até ali', async () => {
       const g = new Gerenciador()
-      const horario = await criarVersao(periodoId, { nome: 'H' })
+      const horario = await criarVersao(periodoId, { nome: 'H' }, gestorId)
       await g.iniciar(periodoId, { versaoId: horario.id, tempoLimiteSegundos: 60 })
       await esperar(g, periodoId, (j) => j.estado === 'executando' && j.progresso)
       g.cancelar(periodoId, { salvar: true })
@@ -165,7 +166,7 @@ describe.skipIf(!banco)('geração na interface (API)', () => {
     it('termina com erro quando o horário não tem o que gerar', async () => {
       const vazio = await criarPeriodo('2027.2')
       const g = new Gerenciador()
-      const horario = await criarVersao(vazio.periodoId, { nome: 'Vazio' })
+      const horario = await criarVersao(vazio.periodoId, { nome: 'Vazio' }, gestorId)
       await g.iniciar(vazio.periodoId, { versaoId: horario.id })
       const job = await esperar(g, vazio.periodoId, terminou)
       expect(job.estado).toBe('erro')
@@ -175,7 +176,7 @@ describe.skipIf(!banco)('geração na interface (API)', () => {
     it('expõe início, estado e cancelamento pela API', async () => {
       const base = `/api/periodos/${periodoId}/geracao`
       expect((await agente.get(base).expect(200)).body.job).toBeNull()
-      const horario = await criarVersao(periodoId, { nome: 'Pela API' })
+      const horario = await criarVersao(periodoId, { nome: 'Pela API' }, gestorId)
       await agente.post(base).send({ versaoId: horario.id, tempoLimiteSegundos: 0 }).expect(400)
       await agente.post(base).send({ tempoLimiteSegundos: 30 }).expect(400)
       await agente.post(base).send({ versaoId: 9999 }).expect(404)
@@ -227,7 +228,7 @@ describe.skipIf(!banco)('geração na interface (API)', () => {
   describe('versões e avaliação (F3-08, F3-10)', () => {
     async function gerar(nome = 'V1') {
       const g = new Gerenciador()
-      const horario = await criarVersao(periodoId, { nome })
+      const horario = await criarVersao(periodoId, { nome }, gestorId)
       await g.iniciar(periodoId, { versaoId: horario.id, tempoLimiteSegundos: 1, semente: 'v' })
       return (await esperar(g, periodoId, terminou)).resultado.versao
     }
@@ -284,7 +285,7 @@ describe.skipIf(!banco)('geração na interface (API)', () => {
     })
 
     it('grava sem sala a aula que repetiria sala e horário', async () => {
-      const horario = await criarVersao(periodoId, { nome: 'Choque' })
+      const horario = await criarVersao(periodoId, { nome: 'Choque' }, gestorId)
       const [a] = await db('atribuicao').where({ versao_id: horario.id }).limit(1)
       const [h] = await db('horario').where({ periodo_id: periodoId }).limit(1)
       const [s] = await db('sala').limit(1)

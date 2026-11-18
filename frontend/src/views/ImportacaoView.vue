@@ -206,6 +206,7 @@ import {
   BTable,
 } from 'bootstrap-vue-next'
 import { http, mensagemDeErro, urlDaApi } from '@/api/http'
+import { useAuthStore } from '@/stores/auth'
 import { usePeriodoStore } from '@/stores/periodo'
 import RelatorioArquivo from '@/components/RelatorioArquivo.vue'
 
@@ -220,17 +221,18 @@ const TITULOS = {
 const tituloDo = (tipo) => TITULOS[tipo] ?? tipo
 
 const periodoStore = usePeriodoStore()
+const auth = useAuthStore()
 const periodo = computed(() => periodoStore.ativo)
 const base = computed(() => `/periodos/${periodo.value?.id}/importacoes`)
 const rota = useRoute()
 
 // Destino: um horário (a oferta do período + as atribuições dele) ou só a oferta.
+// Só entram os horários não publicados de que o usuário é o editor.
 const horarios = ref([])
 const destinoId = ref(null)
+const abertos = computed(() => horarios.value.filter((h) => !h.publicada && auth.ehEditorDe(h)))
 const opcoesDestino = computed(() => [
-  ...horarios.value
-    .filter((h) => !h.publicada)
-    .map((h) => ({ value: h.id, text: `Horário: ${h.nome}` })),
+  ...abertos.value.map((h) => ({ value: h.id, text: `Horário: ${h.nome}` })),
   { value: null, text: 'Só a oferta do período (nenhum horário)' },
 ])
 const sufixoDestino = computed(() => (destinoId.value ? `?versao=${destinoId.value}` : ''))
@@ -242,10 +244,9 @@ async function carregarHorarios() {
   } catch (e) {
     erro.value = mensagemDeErro(e)
   }
-  // ?horario=<id> (vindo das atribuições do horário) ou o primeiro não publicado.
-  const abertos = horarios.value.filter((h) => !h.publicada)
+  // ?horario=<id> (vindo das atribuições do horário) ou o primeiro que ele edita.
   const pedido = Number(rota.query.horario)
-  destinoId.value = abertos.find((h) => h.id === pedido)?.id ?? abertos[0]?.id ?? null
+  destinoId.value = abertos.value.find((h) => h.id === pedido)?.id ?? abertos.value[0]?.id ?? null
 }
 
 const selecionados = ref(null)

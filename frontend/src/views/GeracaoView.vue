@@ -181,7 +181,7 @@
               <BButton
                 variant="outline-primary"
                 size="sm"
-                :disabled="!!job.cancelamento || job.estado === 'gravando'"
+                :disabled="!!job.cancelamento || job.estado === 'gravando' || !podeCancelar"
                 @click="cancelar(true)"
               >
                 Encerrar agora e salvar
@@ -189,7 +189,7 @@
               <BButton
                 variant="outline-danger"
                 size="sm"
-                :disabled="!!job.cancelamento || job.estado === 'gravando'"
+                :disabled="!!job.cancelamento || job.estado === 'gravando' || !podeCancelar"
                 @click="cancelar(false)"
               >
                 Cancelar sem salvar
@@ -316,15 +316,23 @@ let fonte = null
 
 const emAndamento = computed(() => !!job.value?.ativo)
 const erros = computed(() => pendencias.value.filter((p) => p.nivel === 'erro'))
-// O horário publicado não pode ser regerado.
+// O horário publicado não pode ser regerado, e só o editor gera o horário.
+const podeGerar = (v) => !v.publicada && auth.ehEditorDe(v)
+function rotuloHorario(v) {
+  if (v.publicada) return `${v.nome} (publicado)`
+  if (!auth.ehEditorDe(v))
+    return `${v.nome} (${v.editor ? `editado por ${v.editor.nome}` : 'sem editor'})`
+  return `${v.nome}${v.totalAulas ? '' : ' (sem aulas)'}`
+}
 const opcoesHorario = computed(() => [
   { value: null, text: 'Escolha o horário…', disabled: true },
-  ...versoes.value.map((v) => ({
-    value: v.id,
-    text: `${v.nome}${v.publicada ? ' (publicado)' : v.totalAulas ? '' : ' (sem aulas)'}`,
-    disabled: v.publicada,
-  })),
+  ...versoes.value.map((v) => ({ value: v.id, text: rotuloHorario(v), disabled: !podeGerar(v) })),
 ])
+// Encerrar a geração em andamento: só o editor do horário que está sendo gerado.
+const podeCancelar = computed(() => {
+  const gerado = versoes.value.find((v) => v.id === job.value?.opcoes?.versaoId)
+  return !gerado || auth.ehEditorDe(gerado)
+})
 const horarioEscolhido = computed(() => versoes.value.find((v) => v.id === form.versaoId) ?? null)
 
 const percentual = computed(() => {
@@ -371,8 +379,8 @@ async function carregarApoio(periodoId) {
     pendencias.value = painel.pendencias
     versoes.value = lista
     if (!form.versaoId) {
-      const pedido = lista.find((v) => v.id === horarioDaRota && !v.publicada)
-      form.versaoId = pedido?.id ?? lista.find((v) => !v.publicada)?.id ?? null
+      const pedido = lista.find((v) => v.id === horarioDaRota && podeGerar(v))
+      form.versaoId = pedido?.id ?? lista.find(podeGerar)?.id ?? null
     }
   } catch (e) {
     erro.value = mensagemDeErro(e)

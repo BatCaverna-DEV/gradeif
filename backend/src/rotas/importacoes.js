@@ -8,7 +8,7 @@ import { Router } from 'express'
 import multer from 'multer'
 import { z } from 'zod'
 import { validar } from '../middlewares/validar.js'
-import { exigirPerfil, PERFIS } from '../middlewares/autenticacao.js'
+import { exigirEditorDoHorario, exigirPerfil, PERFIS } from '../middlewares/autenticacao.js'
 import { ErroValidacao } from '../erros.js'
 import { TIPOS } from '../importacao/planilhas.js'
 import { gerarModelo, NOMES_ARQUIVO } from '../importacao/modelos.js'
@@ -54,6 +54,8 @@ rotasDoPeriodo.post(
   '/',
   upload.array('arquivos', 5),
   validar({ params: PeriodoParams, query: DestinoQuery }),
+  // Importar num horário (?versao) altera as atribuições dele: só o editor.
+  exigirEditorDoHorario((req) => req.validatedQuery.versao ?? null),
   async (req, res) => {
     const resultado = await servico.confirmar(
       req.params.periodoId,

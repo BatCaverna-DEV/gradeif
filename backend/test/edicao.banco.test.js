@@ -22,12 +22,12 @@ describe.skipIf(!banco)('editor manual (API)', () => {
     await limparBanco()
     const { periodoId } = await criarPeriodo()
     await importarTudo(periodoId)
-    await criarGestor()
+    const gestorId = await criarGestor()
     agente = request.agent(criarApp())
     await agente.post('/api/auth/login').send(GESTOR).expect(200)
 
     // Horário com cópia das atribuições da oferta; as aulas usam as cópias.
-    const { id: versaoId } = await criarVersao(periodoId, { nome: 'Manual' })
+    const { id: versaoId } = await criarVersao(periodoId, { nome: 'Manual' }, gestorId)
     const atribuicoes = await db('atribuicao as a')
       .join('turma as t', 't.id', 'a.turma_id')
       .join('disciplina as d', 'd.id', 'a.disciplina_id')

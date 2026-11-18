@@ -55,6 +55,7 @@
           >Comparar</RouterLink
         >
         <RouterLink
+          v-if="editavel"
           :to="{ name: 'geracao', query: { horario: id } }"
           class="btn btn-sm btn-outline-primary"
           title="Gera este horário de novo, mantendo as aulas fixadas"
@@ -70,6 +71,11 @@
       Este horário está publicado e não pode ser alterado. Duplique-o na tela de horários para
       ajustar.
     </BAlert>
+    <EditorDoHorario
+      v-if="versao && !versao.publicada"
+      :versao="versao"
+      @atualizado="(v) => (versao = v)"
+    />
 
     <div v-if="carregando" class="text-center py-5"><BSpinner label="Carregando" /></div>
 
@@ -292,7 +298,9 @@ import {
   BTabs,
 } from 'bootstrap-vue-next'
 import { http, mensagemDeErro } from '@/api/http'
+import { useAuthStore } from '@/stores/auth'
 import { usePeriodoStore } from '@/stores/periodo'
+import EditorDoHorario from '@/components/EditorDoHorario.vue'
 import GradeSemanal from '@/components/GradeSemanal.vue'
 import PainelViolacoes from '@/components/PainelViolacoes.vue'
 import { DIAS, formatarNumero } from '@/utils/formato'
@@ -323,7 +331,11 @@ const salas = ref([])
 const restricoes = ref([])
 const aba = ref('faltantes')
 
-const editavel = computed(() => !!versao.value && !versao.value.publicada)
+const auth = useAuthStore()
+// Só o editor do horário altera; os outros gestores veem a grade sem poder mexer.
+const editavel = computed(
+  () => !!versao.value && !versao.value.publicada && auth.ehEditorDe(versao.value)
+)
 const base = computed(() => `/periodos/${periodoStore.ativoId}/versoes/${props.id}`)
 
 async function carregar() {

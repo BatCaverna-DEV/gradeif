@@ -2,6 +2,8 @@
   Horários do período (tabela versao_grade). Cada horário tem nome e as próprias
   atribuições, copiadas da oferta (ou de outro horário) quando é criado. Depois de
   configurar as atribuições, o horário é gerado pelo solver e ajustado no editor.
+  Cada horário tem um editor (quem o criou, ou a quem ele transferiu): só ele gera,
+  edita, renomeia, publica e exclui; os outros gestores visualizam e duplicam.
 -->
 <template>
   <div>
@@ -66,6 +68,9 @@
               <span v-if="item.detalhes?.cancelada"> · geração encerrada antes do tempo</span>
             </div>
           </template>
+          <template #cell(editor)="{ item }">
+            <EditorDoHorario :versao="item" compacto @atualizado="substituir" />
+          </template>
           <template #cell(atribuicoes)="{ item }">
             <RouterLink :to="{ name: 'horario-atribuicoes', params: { id: item.id } }">
               {{ item.totalAtribuicoes }} atribuição(ões)
@@ -106,7 +111,7 @@
                 >Disponibilidade</RouterLink
               >
               <RouterLink
-                v-if="!item.publicada"
+                v-if="!item.publicada && podeEditar(item)"
                 :to="{ name: 'geracao', query: { horario: item.id } }"
                 class="btn btn-sm btn-outline-primary"
                 >Gerar</RouterLink
@@ -115,17 +120,17 @@
                 v-if="!item.publicada && item.totalAulas"
                 :to="{ name: 'editor-versao', params: { id: item.id } }"
                 class="btn btn-sm btn-outline-primary"
-                >Editar</RouterLink
+                >{{ podeEditar(item) ? 'Editar' : 'Ver grade' }}</RouterLink
               >
               <BButton
-                v-if="!item.publicada && item.totalAulas"
+                v-if="!item.publicada && item.totalAulas && podeEditar(item)"
                 size="sm"
                 variant="outline-success"
                 @click="pedirPublicacao(item)"
                 >Publicar</BButton
               >
               <BButton
-                v-if="item.publicada"
+                v-if="item.publicada && podeEditar(item)"
                 size="sm"
                 variant="outline-warning"
                 @click="despublicar(item)"
@@ -137,13 +142,18 @@
                 class="btn btn-sm btn-outline-secondary"
                 >Exportar</RouterLink
               >
-              <BButton size="sm" variant="outline-secondary" @click="abrirRenomear(item)"
+              <BButton
+                v-if="podeEditar(item)"
+                size="sm"
+                variant="outline-secondary"
+                @click="abrirRenomear(item)"
                 >Renomear</BButton
               >
               <BButton size="sm" variant="outline-secondary" @click="abrirNovo(item)"
                 >Duplicar</BButton
               >
               <BButton
+                v-if="podeEditar(item)"
                 size="sm"
                 variant="outline-danger"
                 :disabled="item.publicada"
@@ -156,8 +166,9 @@
         </BTable>
       </BCard>
       <p class="small text-body-secondary mt-2">
-        A situação e a pontuação são as da última geração ou edição. A tela do horário reavalia com
-        os dados e os pesos atuais.
+        Só o editor de cada horário o altera; os outros gestores visualizam e podem duplicá-lo. A
+        situação e a pontuação são as da última geração ou edição. A tela do horário reavalia com os
+        dados e os pesos atuais.
       </p>
     </template>
 
@@ -274,11 +285,14 @@ import {
   BTable,
 } from 'bootstrap-vue-next'
 import { http, mensagemDeErro } from '@/api/http'
+import { useAuthStore } from '@/stores/auth'
 import { usePeriodoStore } from '@/stores/periodo'
+import EditorDoHorario from '@/components/EditorDoHorario.vue'
 import { formatarDataHora, formatarNumero } from '@/utils/formato'
 
 const CAMPOS = [
   { key: 'nome', label: 'Horário' },
+  { key: 'editor', label: 'Editor' },
   { key: 'atribuicoes', label: 'Atribuições' },
   { key: 'situacao', label: 'Situação' },
   { key: 'pontuacao', label: 'Pontuação', sortable: true },
@@ -287,6 +301,8 @@ const CAMPOS = [
 ]
 
 const periodoStore = usePeriodoStore()
+const auth = useAuthStore()
+const podeEditar = (item) => auth.ehEditorDe(item)
 const periodo = computed(() => periodoStore.ativo)
 const base = computed(() => `/periodos/${periodo.value?.id}/versoes`)
 
@@ -315,6 +331,14 @@ function descricaoOrigem(item) {
   if (item.origem === 'solver' && geradoEm) return `Gerado em ${formatarDataHora(geradoEm)}`
   if (item.detalhes?.copiaDe) return `Cópia criada em ${formatarDataHora(item.criadaEm)}`
   return `Criado em ${formatarDataHora(item.criadaEm)}`
+}
+
+// Troca o horário na lista pelo resumo atualizado (transferir ou assumir a edição).
+function substituir(atualizado) {
+  versoes.value = versoes.value.map((v) => (v.id === atualizado.id ? atualizado : v))
+  sucesso.value = auth.ehEditorDe(atualizado)
+    ? `Você agora é o editor de ${atualizado.nome}.`
+    : `A edição de ${atualizado.nome} passou para ${atualizado.editor?.nome}.`
 }
 
 async function carregar() {

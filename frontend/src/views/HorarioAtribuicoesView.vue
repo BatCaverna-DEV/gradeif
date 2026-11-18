@@ -14,7 +14,7 @@
       </div>
       <div v-if="versao" class="d-flex flex-wrap gap-2">
         <RouterLink
-          v-if="!versao.publicada"
+          v-if="editavel"
           :to="{ name: 'importacao', query: { horario: id } }"
           class="btn btn-sm btn-outline-primary"
           title="Importa a planilha de oferta e gera as atribuições neste horário"
@@ -32,7 +32,7 @@
           >Ver grade</RouterLink
         >
         <RouterLink
-          v-if="!versao.publicada"
+          v-if="editavel"
           :to="{ name: 'geracao', query: { horario: id } }"
           class="btn btn-sm btn-primary"
           >Gerar este horário</RouterLink
@@ -55,6 +55,11 @@
       Este horário está publicado e não pode ser alterado. Duplique-o na tela de horários para fazer
       outra proposta.
     </BAlert>
+    <EditorDoHorario
+      v-if="versao && !versao.publicada"
+      :versao="versao"
+      @atualizado="(v) => (versao = v)"
+    />
     <BAlert
       :model-value="!!versao?.totalAulas && !versao?.publicada"
       variant="secondary"
@@ -65,7 +70,7 @@
       nova geração.
     </BAlert>
 
-    <div v-if="versao && !versao.publicada" class="d-flex flex-wrap gap-2 mb-2">
+    <div v-if="editavel" class="d-flex flex-wrap gap-2 mb-2">
       <BButton size="sm" variant="primary" @click="abrirNovaAtribuicao()">Nova atribuição</BButton>
       <BButton size="sm" variant="outline-primary" @click="abrirNovaTurma">Nova turma</BButton>
       <span class="small text-body-secondary align-self-center">
@@ -82,6 +87,7 @@
           :carregando="carregando"
           placeholder="Buscar por turma, disciplina ou professor"
           texto-vazio="Este horário não tem atribuições. Adicione da oferta abaixo."
+          :somente-leitura="!editavel"
           @editar="abrirEdicao"
           @excluir="pedirExclusao"
         >
@@ -123,7 +129,7 @@
         Disciplinas que foram tiradas deste horário ou que entraram na oferta depois que ele foi
         criado.
       </p>
-      <BFormCheckboxGroup v-model="escolhidas" stacked>
+      <BFormCheckboxGroup v-model="escolhidas" stacked :disabled="!editavel">
         <BFormCheckbox v-for="a in fora" :key="a.id" :value="a.id">
           <strong>{{ a.turma }} · {{ a.disciplina }}</strong> — {{ a.disciplinaNome }},
           {{ a.aulasSemanais }} aula(s), {{ a.professoresDetalhe.map((p) => p.nome).join(', ') }}
@@ -133,7 +139,7 @@
         class="mt-2"
         size="sm"
         variant="primary"
-        :disabled="!escolhidas.length || ocupado || versao?.publicada"
+        :disabled="!escolhidas.length || ocupado || !editavel"
         @click="adicionar"
         >Adicionar ao horário</BButton
       >
@@ -289,7 +295,9 @@ import {
   BModal,
 } from 'bootstrap-vue-next'
 import { http, mensagemDeErro } from '@/api/http'
+import { useAuthStore } from '@/stores/auth'
 import { usePeriodoStore } from '@/stores/periodo'
+import EditorDoHorario from '@/components/EditorDoHorario.vue'
 import TabelaDados from '@/components/TabelaDados.vue'
 import FormularioRegistro from '@/components/FormularioRegistro.vue'
 import { ENTIDADES } from '@/dados/entidades'
@@ -324,6 +332,11 @@ const periodoStore = usePeriodoStore()
 const base = computed(() => `/periodos/${periodoStore.ativoId}/versoes/${props.id}`)
 
 const versao = ref(null)
+const auth = useAuthStore()
+// Só o editor altera as atribuições; os outros gestores consultam.
+const editavel = computed(
+  () => !!versao.value && !versao.value.publicada && auth.ehEditorDe(versao.value)
+)
 const atribuicoes = ref([])
 const fora = ref([])
 const professores = ref([])

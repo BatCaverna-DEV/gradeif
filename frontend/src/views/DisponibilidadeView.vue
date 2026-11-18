@@ -125,6 +125,11 @@
         <BAlert :model-value="!!horarioAtual?.publicada" variant="info">
           Este horário está publicado e a disponibilidade dele não pode ser alterada.
         </BAlert>
+        <EditorDoHorario
+          v-if="horarioAtual && !horarioAtual.publicada"
+          :versao="horarioAtual"
+          @atualizado="substituirHorario"
+        />
         <BCard v-if="recursoId && gradeHoraria" no-body>
           <div class="d-flex flex-wrap gap-2 align-items-center p-2 border-bottom">
             <strong>{{ nomeRecurso }}</strong>
@@ -291,6 +296,7 @@ import {
 } from 'bootstrap-vue-next'
 import { http, mensagemDeErro } from '@/api/http'
 import { useAuthStore } from '@/stores/auth'
+import EditorDoHorario from '@/components/EditorDoHorario.vue'
 import { usePeriodoStore } from '@/stores/periodo'
 import { DIAS } from '@/utils/formato'
 import { normalizar } from '@/utils/texto'
@@ -315,7 +321,14 @@ const horarios = ref([])
 const versaoId = ref(null)
 const escopo = computed(() => (versaoId.value ? `?versao=${versaoId.value}` : ''))
 const horarioAtual = computed(() => horarios.value.find((h) => h.id === versaoId.value) ?? null)
-const somenteLeitura = computed(() => !!horarioAtual.value?.publicada)
+// A disponibilidade de um horário só é alterada pelo editor dele (e não se publicado).
+const somenteLeitura = computed(
+  () =>
+    !!horarioAtual.value && (horarioAtual.value.publicada || !auth.ehEditorDe(horarioAtual.value))
+)
+function substituirHorario(atualizado) {
+  horarios.value = horarios.value.map((h) => (h.id === atualizado.id ? atualizado : h))
+}
 const opcoesEscopo = computed(() => [
   ...horarios.value.map((h) => ({
     value: h.id,
