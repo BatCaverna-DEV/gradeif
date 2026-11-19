@@ -27,13 +27,25 @@
         :state="estado(c.campo)"
       />
 
-      <BFormCheckboxGroup
-        v-else-if="c.tipo === 'checkboxes'"
-        :id="`campo-${c.campo}`"
-        v-model="modelo[c.campo]"
-        :options="opcoesDe(c)"
-        :state="estado(c.campo)"
-      />
+      <template v-else-if="c.tipo === 'checkboxes'">
+        <BFormCheckboxGroup
+          v-if="opcoesDe(c).length"
+          :id="`campo-${c.campo}`"
+          v-model="modelo[c.campo]"
+          :options="opcoesDe(c)"
+          :state="estado(c.campo)"
+        />
+        <!-- Sem opções (ex.: período sem turnos): diz o porquê em vez de um campo vazio. -->
+        <BAlert
+          v-else
+          :id="`campo-${c.campo}`"
+          :model-value="true"
+          variant="warning"
+          class="small py-2 mb-0"
+        >
+          <slot name="sem-opcoes" :campo="c.campo">Nenhuma opção disponível.</slot>
+        </BAlert>
+      </template>
 
       <template v-else-if="c.tipo === 'multiselect'">
         <BFormInput
@@ -107,6 +119,7 @@
 <script setup>
 import { reactive } from 'vue'
 import {
+  BAlert,
   BButton,
   BForm,
   BFormCheckbox,

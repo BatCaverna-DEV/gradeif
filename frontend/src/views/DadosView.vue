@@ -151,7 +151,20 @@
         :opcoes="opcoes"
         :erros="edicao.errosCampos"
         @enviar="salvar"
-      />
+      >
+        <template #sem-opcoes="{ campo }">
+          <template v-if="campo === 'turnos'">
+            O período {{ periodo?.nome }} ainda não tem turnos. Cadastre-os em
+            <RouterLink
+              v-if="periodo"
+              :to="{ name: 'grade-horaria', params: { id: periodo.id } }"
+              >Turnos e tempos de aula</RouterLink
+            >
+            e depois volte para cadastrar a turma.
+          </template>
+          <template v-else>Nenhuma opção disponível.</template>
+        </template>
+      </FormularioRegistro>
       <p v-if="edicao.id" class="small text-body-secondary mb-0">
         Mudanças que afetam aulas já alocadas marcam essas aulas para revisão no editor de grade.
       </p>
