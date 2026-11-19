@@ -191,11 +191,15 @@
         <BCard no-body>
           <BTabs v-model="aba" card nav-wrapper-class="px-2 pt-2" small>
             <BTab id="faltantes" :title="`Não alocadas (${totalFaltantes})`">
-              <p v-if="!faltantes.length" class="small text-body-secondary mb-0">
-                Todas as aulas estão na grade.
+              <p v-if="!faltantesVisiveis.length" class="small text-body-secondary mb-0">
+                {{
+                  visao === 'turma'
+                    ? 'Todas as aulas desta turma estão na grade.'
+                    : 'Todas as aulas estão na grade.'
+                }}
               </p>
               <ul v-else class="list-unstyled mb-0 lista">
-                <li v-for="f in faltantes" :key="f.atribuicaoId">
+                <li v-for="f in faltantesVisiveis" :key="f.atribuicaoId">
                   <button
                     type="button"
                     class="item-lista"
@@ -765,7 +769,15 @@ onBeforeUnmount(() => window.removeEventListener('keydown', aoTeclar))
 const faixaProfessor = (f) =>
   f.professores[0]?.cor ? { borderLeft: `5px solid ${f.professores[0].cor}` } : undefined
 
-const totalFaltantes = computed(() => faltantes.value.reduce((s, f) => s + f.faltam, 0))
+// Na visão por turma, só as aulas não alocadas da turma selecionada.
+const faltantesVisiveis = computed(() =>
+  visao.value === 'turma'
+    ? faltantes.value.filter((f) => f.turmaId === recursoId.value)
+    : faltantes.value
+)
+const totalFaltantes = computed(() =>
+  faltantesVisiveis.value.reduce((s, f) => s + f.faltam, 0)
+)
 const aRevisar = computed(() => aulas.value.filter((a) => a.revisar))
 
 function irParaAula(a) {
