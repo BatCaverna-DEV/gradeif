@@ -48,6 +48,12 @@
               @dragleave="soltandoEm = null"
               @drop.prevent="aoSoltar(turno.id, d, tempo.ordem, null)"
             >
+              <span
+                v-if="marcaProfessor(turno.id, d, tempo.ordem)"
+                class="marca-professor"
+                :class="`professor-${marcaProfessor(turno.id, d, tempo.ordem)}`"
+                aria-hidden="true"
+              />
               <button
                 v-for="a in aulasDa(turno.id, d, tempo.ordem)"
                 :key="a.id"
@@ -117,8 +123,10 @@ const props = defineProps({
   // Na visão por turma, os turnos permitidos aparecem mesmo vazios.
   turnosFixos: { type: Array, default: () => [] },
   editavel: { type: Boolean, default: false },
-  celulas: { type: Map, default: null }, // horarioId → { nivel, motivos }
+  celulas: { type: Map, default: null }, // horarioId → { nivel, professor, motivos }
   selecionada: { type: Number, default: null }, // id da aula selecionada
+  // Marca as células em que o professor da aula selecionada está disponível.
+  mostrarProfessor: { type: Boolean, default: false },
 })
 const emit = defineEmits(['selecionar', 'clicar-celula', 'arrastar', 'arrastar-fim', 'soltar'])
 
@@ -147,10 +155,26 @@ function classeNivel(turno, dia, ordem) {
   return c ? `nivel-${c.nivel}` : ''
 }
 
+const ROTULOS_PROFESSOR = {
+  livre: 'Professor disponível',
+  evitar: 'Professor disponível, mas prefere evitar este horário',
+  ocupado: 'Professor já tem aula neste horário',
+  indisponivel: 'Professor indisponível neste horário',
+}
+
+// Só livre e "prefere evitar" ganham marca: são os horários em que a aula cabe
+// para o professor.
+function marcaProfessor(turno, dia, ordem) {
+  if (!props.mostrarProfessor) return null
+  const p = celulaDe(turno, dia, ordem)?.professor
+  return p === 'livre' || p === 'evitar' ? p : null
+}
+
 function dicaCelula(turno, dia, ordem) {
   const c = celulaDe(turno, dia, ordem)
   if (!c) return undefined
-  return [ROTULOS_NIVEL[c.nivel], ...(c.motivos ?? [])].join('\n')
+  const professor = props.mostrarProfessor && c.professor ? [ROTULOS_PROFESSOR[c.professor]] : []
+  return [ROTULOS_NIVEL[c.nivel], ...professor, ...(c.motivos ?? [])].join('\n')
 }
 
 // ---------- Arrastar e soltar ----------
@@ -284,9 +308,35 @@ function descricao(a) {
   width: 6.5rem;
 }
 .grade td {
+  position: relative;
   vertical-align: top;
   padding: 0.2rem;
   height: 3.6rem;
+}
+/* Professor disponível: borda tracejada e um ponto no canto da célula. */
+.grade td:has(> .professor-livre) {
+  outline: 2px dashed var(--bs-success);
+  outline-offset: -3px;
+}
+.grade td:has(> .professor-evitar) {
+  outline: 2px dashed var(--bs-warning);
+  outline-offset: -3px;
+}
+.marca-professor {
+  position: absolute;
+  top: 0.2rem;
+  right: 0.2rem;
+  width: 0.6rem;
+  height: 0.6rem;
+  border-radius: 50%;
+  z-index: 1;
+  pointer-events: none;
+}
+.professor-livre {
+  background: var(--bs-success);
+}
+.professor-evitar {
+  background: var(--bs-warning);
 }
 .cartao {
   display: block;

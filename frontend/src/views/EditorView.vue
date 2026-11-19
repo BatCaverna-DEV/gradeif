@@ -106,6 +106,10 @@
             <span class="amostra nivel-livre"></span> livre
             <span class="amostra nivel-flexivel"></span> viola flexível
             <span class="amostra nivel-rigida"></span> viola rígida
+            <template v-if="selecao?.tipo === 'faltante'">
+              <span class="amostra professor-livre"></span> professor disponível
+              <span class="amostra professor-evitar"></span> professor prefere evitar
+            </template>
           </div>
           <div :class="{ 'opacity-50': ocupado }">
             <GradeSemanal
@@ -117,6 +121,7 @@
               :editavel="editavel"
               :celulas="simulacao"
               :selecionada="selecao?.tipo === 'aula' ? selecao.aula.id : null"
+              :mostrar-professor="selecao?.tipo === 'faltante'"
               :titulo="`Grade de ${rotuloRecurso}`"
               @selecionar="selecionarAula"
               @arrastar="selecionarAula($event, true)"
@@ -863,5 +868,18 @@ watch(() => [props.id, periodoStore.ativoId], carregar, { immediate: true })
 }
 .nivel-rigida {
   background: var(--bs-danger-bg-subtle);
+}
+.amostra.professor-livre,
+.amostra.professor-evitar {
+  border-radius: 50%;
+  width: 0.7rem;
+  height: 0.7rem;
+  border: 0;
+}
+.professor-livre {
+  background: var(--bs-success);
+}
+.professor-evitar {
+  background: var(--bs-warning);
 }
 </style>
