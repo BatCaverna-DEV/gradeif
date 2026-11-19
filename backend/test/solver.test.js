@@ -5,7 +5,7 @@ import { Avaliador } from '../src/core/avaliador.js'
 import { Grade } from '../src/core/grade.js'
 import { criarInstancia } from '../src/core/instancia.js'
 import { resolver, validarSolucao } from '../src/core/index.js'
-import { construir, reparar } from '../src/core/solver/construcao.js'
+import { construir, eliminarChoques, reparar } from '../src/core/solver/construcao.js'
 import { Estado, dividirEmBlocos } from '../src/core/solver/estado.js'
 import { sortearMovimento } from '../src/core/solver/movimentos.js'
 import { gerarProblemaFicticio } from '../scripts/problema-ficticio.js'
@@ -201,6 +201,49 @@ describe('solver', () => {
     expect(s.tempoMs).toBeLessThan(5000)
     expect(etapas[0]).toBe('construcao')
     expect(etapas).toContain('melhoria')
+  })
+
+  it('turma com mais aulas que horários deixa o excesso de fora, sem choque', () => {
+    const p = rapido()
+    // INF1M só com os dois primeiros tempos da manhã: 10 horários para 12 aulas.
+    p.horarios = p.horarios.filter((x) => x.turnoId !== M || x.ordem <= 2)
+    p.atribuicoes = p.atribuicoes.map((a) => (a.id === 2 ? { ...a, aulasSemanais: 6 } : a))
+    for (const semente of ['a', 'b', 'c']) {
+      const s = validarSolucao(resolver({ ...p, opcoes: { ...p.opcoes, semente } }))
+      const choques = s.violacoes.filter((v) => ['R1', 'R2', 'R3'].includes(v.codigo))
+      expect(choques).toEqual([])
+      expect(s.naoAlocados.reduce((n, x) => n + x.aulasFaltantes, 0)).toBe(2)
+      expect(s.pontuacaoPorRestricao.R4).toBe(2)
+    }
+  })
+
+  it('choque custa mais ao solver que aula faltando', () => {
+    const inst = criarInstancia(problemaBase())
+    const estado = new Estado(inst)
+    const hor = inst.idx.horario.get(h(1, M, 1))
+    const mat = estado.ativos.find((b) => b.a === 0)
+    const por = estado.ativos.find((b) => b.a === 1)
+    estado.posicionar(mat, hor, 0)
+    const antes = estado.av.custoTotal
+    // POR na hora da MAT: troca uma aula faltando (R4) por um choque de turma (R2).
+    expect(estado.simular(por, hor, 1)).toBeGreaterThan(0)
+    expect(estado.av.custoTotal).toBe(antes)
+  })
+
+  it('tira da grade a aula que ficou em choque e tenta recolocá-la sem choque', () => {
+    const inst = criarInstancia(problemaBase())
+    const rnd = criarAleatorio('choque')
+    const estado = new Estado(inst)
+    reparar(estado, construir(estado, rnd), rnd)
+    // Força a POR da INF1M no mesmo horário de uma MAT da mesma turma.
+    const mat = estado.ativos.find((b) => b.a === 0 && b.h0 >= 0)
+    const por = estado.ativos.find((b) => b.a === 1)
+    estado.posicionar(por, mat.h0, 1)
+    expect(estado.av.rigido).toBeGreaterThan(0)
+    expect(eliminarChoques(estado, rnd)).toBe(1)
+    const r = estado.av.relatorio()
+    expect(r.violacoes.filter((v) => ['R1', 'R2', 'R3'].includes(v.codigo))).toEqual([])
+    expect(r.valida).toBe(true) // havia lugar livre: a aula voltou para a grade
   })
 
   it('fecha o campus fictício sem violação rígida', () => {
