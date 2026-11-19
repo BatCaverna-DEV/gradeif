@@ -3,7 +3,7 @@
 
 import { criarAleatorio } from '../aleatorio.js'
 import { criarInstancia } from '../instancia.js'
-import { construir, diagnosticar, reparar } from './construcao.js'
+import { construir, diagnosticar, eliminarChoques, reparar } from './construcao.js'
 import { Estado } from './estado.js'
 import { recozer } from './recozimento.js'
 
@@ -31,6 +31,8 @@ export function resolver(entrada, { aoProgresso, deveParar } = {}) {
   })
 
   const melhoria = recozer(estado, rnd, opcoes, { inicio, aoProgresso, deveParar })
+  // Aula em choque nunca sai do gerador: vai para as não alocadas.
+  eliminarChoques(estado, rnd)
 
   const { aulas, posicao } = estado.grade.exportar()
   const relatorio = estado.av.relatorio(posicao)

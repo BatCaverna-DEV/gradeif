@@ -191,6 +191,53 @@ export function reparar(estado, pendentes, rnd) {
   return restantes
 }
 
+// O bloco divide algum tempo com outra aula do mesmo professor (R1), da mesma
+// turma (R2, salvo paralela compatível) ou da mesma sala (R3)? Só conta as regras
+// ativas no período.
+function emChoque(estado, b, ativas) {
+  const { inst, grade: g } = estado
+  const grupo = inst.atrGrupo[b.a]
+  const t = inst.atrTurma[b.a]
+  const outra = (lista) => lista.some((i) => !b.aulas.includes(i))
+  for (const h of estado.tempos(b.h0, b.tam)) {
+    if (ativas.has('R1') && inst.atrProfs[b.a].some((p) => outra(g.aulasDoProfessor(p, h))))
+      return true
+    if (ativas.has('R3') && b.s >= 0 && outra(g.aulasDaSala(b.s, h))) return true
+    if (
+      ativas.has('R2') &&
+      g.aulasDaTurma(t, h).some((i) => {
+        if (b.aulas.includes(i)) return false
+        const a = g.atr[i]
+        return !(grupo >= 0 && a !== b.a && inst.atrGrupo[a] === grupo)
+      })
+    )
+      return true
+  }
+  return false
+}
+
+// Garantia final: nenhuma aula móvel fica em choque. Enquanto houver choque, tira
+// da grade o bloco envolvido com menos aulas (perde menos) e, no fim, tenta
+// recolocar os retirados só em posições sem choque (reparo). O que não couber vai
+// para as não alocadas. Choque só entre aulas fixadas fica como o gestor deixou.
+export function eliminarChoques(estado, rnd) {
+  const ativas = new Set(estado.av.modulos.map((m) => m.codigo))
+  if (!['R1', 'R2', 'R3'].some((c) => ativas.has(c))) return 0
+  const retirados = []
+  for (;;) {
+    let pior = null
+    for (const b of estado.ativos) {
+      if (b.h0 < 0 || !emChoque(estado, b, ativas)) continue
+      if (!pior || b.tam < pior.tam) pior = b
+    }
+    if (!pior) break
+    estado.posicionar(pior, -1, -1)
+    retirados.push(pior)
+  }
+  if (retirados.length) reparar(estado, retirados, rnd)
+  return retirados.length
+}
+
 // Explica por que um bloco não tem lugar: para cada posição possível, quais
 // regras impedem, e em quantas posições cada motivo aparece.
 export function diagnosticar(estado, b) {

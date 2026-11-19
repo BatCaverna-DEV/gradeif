@@ -8,12 +8,16 @@
 // esquece (quem alterou a grade deve desfazer a alteração).
 //
 // Pontuação: rígidas contam sem peso, flexíveis multiplicadas pelo peso. Para o
-// solver, o custo total é rigido * PESO_RIGIDA + flexivel, de modo que qualquer
-// violação rígida pesa mais que muitas flexíveis.
+// solver, o custo total é rigidoPonderado * PESO_RIGIDA + flexivel, de modo que
+// qualquer violação rígida pesa mais que muitas flexíveis. Entre as rígidas, os
+// choques (R1 a R3) pesam PESO_CHOQUE: deixar uma aula de fora (R4) sai sempre
+// mais barato que encaixá-la em choque com outra.
 
 import { ESCOPOS, restricoesRegistradas } from './restricoes/index.js'
 
 export const PESO_RIGIDA = 1000
+export const PESO_CHOQUE = 10
+export const CHOQUES = Object.freeze(['R1', 'R2', 'R3'])
 
 export class Avaliador {
   constructor(grade) {
@@ -30,6 +34,8 @@ export class Avaliador {
           cfg,
           rigida: cfg.rigida,
           peso: cfg.rigida ? 1 : cfg.peso,
+          // Peso dentro do custo rígido do solver; o relatório conta sem peso.
+          pesoRigido: CHOQUES.includes(m.codigo) ? PESO_CHOQUE : 1,
           cache: new Float64Array(inst.tamanho[m.escopo]),
           total: 0, // soma sem peso
         }
@@ -38,6 +44,7 @@ export class Avaliador {
       ESCOPOS.map((e) => [e, this.modulos.filter((m) => m.escopo === e)])
     )
     this.rigido = 0
+    this.rigidoPonderado = 0
     this.flexivel = 0
 
     // Unidades tocadas na mudança em curso (marca por carimbo, sem limpar arrays).
@@ -48,13 +55,14 @@ export class Avaliador {
   }
 
   get custoTotal() {
-    return this.rigido * PESO_RIGIDA + this.flexivel
+    return this.rigidoPonderado * PESO_RIGIDA + this.flexivel
   }
 
   // ---------- Modo completo ----------
   avaliarTudo() {
     const g = this.grade
     this.rigido = 0
+    this.rigidoPonderado = 0
     this.flexivel = 0
     for (const m of this.modulos) {
       m.total = 0
@@ -63,8 +71,10 @@ export class Avaliador {
         m.cache[r] = c
         m.total += c
       }
-      if (m.rigida) this.rigido += m.total
-      else this.flexivel += m.total * m.peso
+      if (m.rigida) {
+        this.rigido += m.total
+        this.rigidoPonderado += m.total * m.pesoRigido
+      } else this.flexivel += m.total * m.peso
     }
     this.pendentes.length = 0
     return { rigido: this.rigido, flexivel: this.flexivel, total: this.custoTotal }
@@ -101,6 +111,7 @@ export class Avaliador {
   calcularVariacao() {
     const g = this.grade
     let rigido = 0
+    let ponderado = 0
     let flexivel = 0
     this.pendentes.length = 0
     for (const e of ESCOPOS) {
@@ -112,12 +123,14 @@ export class Avaliador {
           const d = novo - m.cache[r]
           if (d === 0) continue
           this.pendentes.push(m, r, novo)
-          if (m.rigida) rigido += d
-          else flexivel += d * m.peso
+          if (m.rigida) {
+            rigido += d
+            ponderado += d * m.pesoRigido
+          } else flexivel += d * m.peso
         }
       }
     }
-    this.variacao = { rigido, flexivel, total: rigido * PESO_RIGIDA + flexivel }
+    this.variacao = { rigido, flexivel, total: ponderado * PESO_RIGIDA + flexivel }
     return this.variacao
   }
 
@@ -129,8 +142,10 @@ export class Avaliador {
       const d = p[k + 2] - m.cache[r]
       m.cache[r] = p[k + 2]
       m.total += d
-      if (m.rigida) this.rigido += d
-      else this.flexivel += d * m.peso
+      if (m.rigida) {
+        this.rigido += d
+        this.rigidoPonderado += d * m.pesoRigido
+      } else this.flexivel += d * m.peso
     }
     p.length = 0
   }
