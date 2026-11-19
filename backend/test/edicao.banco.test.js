@@ -85,6 +85,8 @@ describe.skipIf(!banco)('editor manual (API)', () => {
       body.celulas.find((c) => c.horarioId === horario(dia, turno, ordem))
     expect(body.celulas).toHaveLength(30)
     expect(celula(1, 'Matutino', 1).nivel).toBe('atual')
+    // A própria aula não ocupa a professora.
+    expect(celula(1, 'Matutino', 1).professor).toBe('livre')
     // À tarde: fora do turno da turma e Ana já dá aula na INF1V.
     const tarde = celula(1, 'Vespertino', 1)
     expect(tarde.nivel).toBe('rigida')
@@ -109,6 +111,10 @@ describe.skipIf(!banco)('editor manual (API)', () => {
     expect(celula(1, 'Vespertino', 1).nivel).toBe('rigida') // turma já ocupada
     expect(celula(3, 'Vespertino', 1).nivel).not.toBe('rigida')
     expect(celula(3, 'Vespertino', 1).salaId).toBe(ids.salas['Sala 1'])
+    // Disponibilidade da professora (Ana dá MAT1 na INF1M e na INF1V).
+    expect(celula(1, 'Matutino', 1).professor).toBe('ocupado')
+    expect(celula(1, 'Vespertino', 1).professor).toBe('ocupado')
+    expect(celula(3, 'Vespertino', 1).professor).toBe('livre')
     await agente.post(`${base}/simular`).send({}).expect(400)
   })
 

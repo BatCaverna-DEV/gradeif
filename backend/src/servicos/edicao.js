@@ -9,7 +9,7 @@
 
 import { db } from '../db/knex.js'
 import { Avaliador } from '../core/avaliador.js'
-import { criarInstancia, INDISPONIVEL } from '../core/instancia.js'
+import { criarInstancia, INDISPONIVEL, PREFERE_EVITAR } from '../core/instancia.js'
 import { montarGrade } from '../core/index.js'
 import { corDoProfessor } from '../core/cores.js'
 import { ErroConflito, ErroNaoEncontrado, ErroValidacao } from '../erros.js'
@@ -148,6 +148,22 @@ function explicar(ctx, i, pioras) {
   return [...new Set(motivos)].slice(0, MAXIMO_MOTIVOS)
 }
 
+// Situação dos professores da aula i no horário h, sem contar a própria aula:
+// 'indisponivel' (indisponibilidade rígida), 'ocupado' (outra aula), 'evitar'
+// (prefere evitar) ou 'livre'. Com mais de um professor, vale a pior.
+const ORDEM_PROFESSOR = ['livre', 'evitar', 'ocupado', 'indisponivel']
+function situacaoProfessor(ctx, i, h) {
+  const { inst, grade: g } = ctx
+  let pior = 0
+  for (const p of inst.atrProfs[g.atr[i]]) {
+    const indisp = inst.indisp.professor[p * inst.H + h]
+    if (indisp === INDISPONIVEL) return 'indisponivel'
+    if (g.aulasDoProfessor(p, h).some((j) => j !== i)) pior = Math.max(pior, 2)
+    else if (indisp === PREFERE_EVITAR) pior = Math.max(pior, 1)
+  }
+  return ORDEM_PROFESSOR[pior]
+}
+
 export async function simular(periodoId, versaoId, { aulaId, atribuicaoId }) {
   await buscarVersao(periodoId, versaoId)
   const ctx = await contexto(periodoId, versaoId)
@@ -169,9 +185,16 @@ export async function simular(periodoId, versaoId, { aulaId, atribuicaoId }) {
   for (let h = 0; h < inst.H; h++) {
     const horarioId = inst.horarios[h].id
     if (h === hAtual) {
-      celulas.push({ horarioId, nivel: 'atual', salaId: idSala(sAtual), motivos: [] })
+      celulas.push({
+        horarioId,
+        nivel: 'atual',
+        salaId: idSala(sAtual),
+        professor: situacaoProfessor(ctx, i, h),
+        motivos: [],
+      })
       continue
     }
+    const professor = situacaoProfessor(ctx, i, h)
     const s = salaPara(ctx, i, h)
     av.iniciarMudanca()
     av.tocarAula(i)
@@ -197,6 +220,7 @@ export async function simular(periodoId, versaoId, { aulaId, atribuicaoId }) {
       horarioId,
       nivel,
       salaId: idSala(s),
+      professor,
       variacao: { rigido: variacao.rigido, flexivel: variacao.flexivel },
       motivos,
     })
