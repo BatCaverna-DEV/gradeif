@@ -43,128 +43,143 @@
         {{ sucesso }}
       </BAlert>
 
-      <BCard no-body>
+      <BCard v-if="carregando || !versoes.length" no-body>
         <div v-if="carregando" class="text-center py-5"><BSpinner label="Carregando" /></div>
-        <div v-else-if="!versoes.length" class="text-body-secondary p-3">
+        <div v-else class="text-body-secondary p-3">
           <p class="mb-2">Nenhum horário neste período.</p>
           <BButton variant="primary" size="sm" @click="abrirNovo">Criar o primeiro horário</BButton>
         </div>
-        <BTable
-          v-else
-          :items="versoes"
-          :fields="CAMPOS"
-          responsive
-          hover
-          class="mb-0"
-          primary-key="id"
-        >
-          <template #cell(nome)="{ item }">
-            <RouterLink :to="{ name: 'versao', params: { id: item.id } }" class="fw-semibold">{{
-              item.nome
-            }}</RouterLink>
-            <BBadge v-if="item.publicada" variant="primary" class="ms-2">Publicado</BBadge>
-            <div class="small text-body-secondary">
-              {{ descricaoOrigem(item) }}
-              <span v-if="item.detalhes?.cancelada"> · geração encerrada antes do tempo</span>
-            </div>
-          </template>
-          <template #cell(editor)="{ item }">
-            <EditorDoHorario :versao="item" compacto @atualizado="substituir" />
-          </template>
-          <template #cell(atribuicoes)="{ item }">
-            <RouterLink :to="{ name: 'horario-atribuicoes', params: { id: item.id } }">
-              {{ item.totalAtribuicoes }} atribuição(ões)
-            </RouterLink>
-            <span class="small text-body-secondary d-block"
-              >{{ item.aulasPrevistas ?? 0 }} aulas por semana</span
-            >
-          </template>
-          <template #cell(situacao)="{ item }">
-            <BBadge v-if="!item.totalAulas" variant="secondary">não gerado</BBadge>
-            <BBadge v-else-if="item.valida === null" variant="secondary">não avaliado</BBadge>
-            <BBadge v-else :variant="item.valida ? 'success' : 'danger'">
-              {{ item.valida ? 'válido' : `${item.custoRigido} rígida(s)` }}
-            </BBadge>
-          </template>
-          <template #cell(pontuacao)="{ item }">{{
-            item.totalAulas ? formatarNumero(item.pontuacao) : '—'
-          }}</template>
-          <template #cell(aulas)="{ item }">
-            {{ item.totalAulas }}
-            <span v-if="item.aulasFixadas" class="small text-body-secondary d-block"
-              >{{ item.aulasFixadas }} fixadas</span
-            >
-            <span v-if="item.aulasRevisar" class="small text-warning-emphasis d-block"
-              >{{ item.aulasRevisar }} para revisar</span
-            >
-          </template>
-          <template #cell(acoes)="{ item }">
-            <div class="d-flex flex-wrap gap-1 justify-content-end">
-              <RouterLink
-                :to="{ name: 'horario-atribuicoes', params: { id: item.id } }"
-                class="btn btn-sm btn-outline-primary"
-                >Atribuições</RouterLink
-              >
-              <RouterLink
-                :to="{ name: 'disponibilidade', query: { horario: item.id } }"
-                class="btn btn-sm btn-outline-primary"
-                >Disponibilidade</RouterLink
-              >
-              <RouterLink
-                v-if="!item.publicada && podeEditar(item)"
-                :to="{ name: 'geracao', query: { horario: item.id } }"
-                class="btn btn-sm btn-outline-primary"
-                >Gerar</RouterLink
-              >
-              <RouterLink
-                v-if="!item.publicada && item.totalAulas"
-                :to="{ name: 'editor-versao', params: { id: item.id } }"
-                class="btn btn-sm btn-outline-primary"
-                >{{ podeEditar(item) ? 'Editar' : 'Ver grade' }}</RouterLink
-              >
-              <BButton
-                v-if="!item.publicada && item.totalAulas && podeEditar(item)"
-                size="sm"
-                variant="outline-success"
-                @click="pedirPublicacao(item)"
-                >Publicar</BButton
-              >
-              <BButton
-                v-if="item.publicada && podeEditar(item)"
-                size="sm"
-                variant="outline-warning"
-                @click="despublicar(item)"
-                >Despublicar</BButton
-              >
-              <RouterLink
-                v-if="item.totalAulas"
-                :to="{ name: 'exportacoes', query: { versao: item.id } }"
-                class="btn btn-sm btn-outline-secondary"
-                >Exportar</RouterLink
-              >
-              <BButton
-                v-if="podeEditar(item)"
-                size="sm"
-                variant="outline-secondary"
-                @click="abrirRenomear(item)"
-                >Renomear</BButton
-              >
-              <BButton size="sm" variant="outline-secondary" @click="abrirNovo(item)"
-                >Duplicar</BButton
-              >
-              <BButton
-                v-if="podeEditar(item)"
-                size="sm"
-                variant="outline-danger"
-                :disabled="item.publicada"
-                :title="item.publicada ? 'O horário publicado não pode ser excluído' : ''"
-                @click="exclusao = { visivel: true, item }"
-                >Excluir</BButton
-              >
-            </div>
-          </template>
-        </BTable>
       </BCard>
+
+      <!-- Uma seção por situação de edição: os que eu edito primeiro. -->
+      <template v-else>
+        <BCard v-for="g in grupos" :key="g.chave" no-body class="mb-3" :class="`grupo-${g.chave}`">
+          <div class="grupo-cabecalho d-flex flex-wrap align-items-center gap-2 px-3 py-2">
+            <i :class="`bi bi-${g.icone}`" aria-hidden="true" />
+            <h2 class="h6 mb-0">{{ g.titulo }}</h2>
+            <span class="badge rounded-pill text-bg-light border">{{ g.itens.length }}</span>
+            <span class="small text-body-secondary">{{ g.descricao }}</span>
+          </div>
+          <p v-if="!g.itens.length" class="small text-body-secondary px-3 py-2 mb-0">
+            {{ g.vazio }}
+          </p>
+          <BTable
+            v-else
+            :items="g.itens"
+            :fields="CAMPOS"
+            responsive
+            hover
+            class="mb-0"
+            primary-key="id"
+          >
+            <template #cell(nome)="{ item }">
+              <RouterLink :to="{ name: 'versao', params: { id: item.id } }" class="fw-semibold">{{
+                item.nome
+              }}</RouterLink>
+              <BBadge v-if="item.publicada" variant="primary" class="ms-2">Publicado</BBadge>
+              <div class="small text-body-secondary">
+                {{ descricaoOrigem(item) }}
+                <span v-if="item.detalhes?.cancelada"> · geração encerrada antes do tempo</span>
+              </div>
+            </template>
+            <template #cell(editor)="{ item }">
+              <EditorDoHorario :versao="item" compacto @atualizado="substituir" />
+            </template>
+            <template #cell(atribuicoes)="{ item }">
+              <RouterLink :to="{ name: 'horario-atribuicoes', params: { id: item.id } }">
+                {{ item.totalAtribuicoes }} atribuição(ões)
+              </RouterLink>
+              <span class="small text-body-secondary d-block"
+                >{{ item.aulasPrevistas ?? 0 }} aulas por semana</span
+              >
+            </template>
+            <template #cell(situacao)="{ item }">
+              <BBadge v-if="!item.totalAulas" variant="secondary">não gerado</BBadge>
+              <BBadge v-else-if="item.valida === null" variant="secondary">não avaliado</BBadge>
+              <BBadge v-else :variant="item.valida ? 'success' : 'danger'">
+                {{ item.valida ? 'válido' : `${item.custoRigido} rígida(s)` }}
+              </BBadge>
+            </template>
+            <template #cell(pontuacao)="{ item }">{{
+              item.totalAulas ? formatarNumero(item.pontuacao) : '—'
+            }}</template>
+            <template #cell(aulas)="{ item }">
+              {{ item.totalAulas }}
+              <span v-if="item.aulasFixadas" class="small text-body-secondary d-block"
+                >{{ item.aulasFixadas }} fixadas</span
+              >
+              <span v-if="item.aulasRevisar" class="small text-warning-emphasis d-block"
+                >{{ item.aulasRevisar }} para revisar</span
+              >
+            </template>
+            <template #cell(acoes)="{ item }">
+              <div class="d-flex flex-wrap gap-1 justify-content-end">
+                <RouterLink
+                  :to="{ name: 'horario-atribuicoes', params: { id: item.id } }"
+                  class="btn btn-sm btn-outline-primary"
+                  >Atribuições</RouterLink
+                >
+                <RouterLink
+                  :to="{ name: 'disponibilidade', query: { horario: item.id } }"
+                  class="btn btn-sm btn-outline-primary"
+                  >Disponibilidade</RouterLink
+                >
+                <RouterLink
+                  v-if="!item.publicada && podeEditar(item)"
+                  :to="{ name: 'geracao', query: { horario: item.id } }"
+                  class="btn btn-sm btn-outline-primary"
+                  >Gerar</RouterLink
+                >
+                <RouterLink
+                  v-if="!item.publicada && item.totalAulas"
+                  :to="{ name: 'editor-versao', params: { id: item.id } }"
+                  class="btn btn-sm btn-outline-primary"
+                  >{{ podeEditar(item) ? 'Editar' : 'Ver grade' }}</RouterLink
+                >
+                <BButton
+                  v-if="!item.publicada && item.totalAulas && podeEditar(item)"
+                  size="sm"
+                  variant="outline-success"
+                  @click="pedirPublicacao(item)"
+                  >Publicar</BButton
+                >
+                <BButton
+                  v-if="item.publicada && podeEditar(item)"
+                  size="sm"
+                  variant="outline-warning"
+                  @click="despublicar(item)"
+                  >Despublicar</BButton
+                >
+                <RouterLink
+                  v-if="item.totalAulas"
+                  :to="{ name: 'exportacoes', query: { versao: item.id } }"
+                  class="btn btn-sm btn-outline-secondary"
+                  >Exportar</RouterLink
+                >
+                <BButton
+                  v-if="podeEditar(item)"
+                  size="sm"
+                  variant="outline-secondary"
+                  @click="abrirRenomear(item)"
+                  >Renomear</BButton
+                >
+                <BButton size="sm" variant="outline-secondary" @click="abrirNovo(item)"
+                  >Duplicar</BButton
+                >
+                <BButton
+                  v-if="podeEditar(item)"
+                  size="sm"
+                  variant="outline-danger"
+                  :disabled="item.publicada"
+                  :title="item.publicada ? 'O horário publicado não pode ser excluído' : ''"
+                  @click="exclusao = { visivel: true, item }"
+                  >Excluir</BButton
+                >
+              </div>
+            </template>
+          </BTable>
+        </BCard>
+      </template>
       <p class="small text-body-secondary mt-2">
         Só o editor de cada horário o altera; os outros gestores visualizam e podem duplicá-lo. A
         situação e a pontuação são as da última geração ou edição. A tela do horário reavalia com os
@@ -333,6 +348,39 @@ function descricaoOrigem(item) {
   return `Criado em ${formatarDataHora(item.criadaEm)}`
 }
 
+// ---------- Seções: quem edita cada horário ----------
+// "Que eu edito" sempre aparece (com aviso quando vazia); as outras, só se tiverem
+// algum horário. Transferir ou assumir a edição muda o horário de seção sozinho.
+const grupos = computed(() => {
+  const meus = versoes.value.filter((v) => auth.ehEditorDe(v))
+  const deOutros = versoes.value.filter((v) => v.editor && !auth.ehEditorDe(v))
+  const semEditor = versoes.value.filter((v) => !v.editor)
+  return [
+    {
+      chave: 'meus',
+      titulo: 'Horários que eu edito',
+      icone: 'pencil-square',
+      descricao: 'Você gera, edita, publica e exclui.',
+      vazio: 'Você não edita nenhum horário. Crie um novo ou duplique um dos outros.',
+      itens: meus,
+    },
+    {
+      chave: 'outros',
+      titulo: 'Editados por outros gestores',
+      icone: 'people',
+      descricao: 'Você visualiza e pode duplicar.',
+      itens: deOutros,
+    },
+    {
+      chave: 'sem',
+      titulo: 'Sem editor',
+      icone: 'unlock',
+      descricao: 'Qualquer gestor pode assumir a edição.',
+      itens: semEditor,
+    },
+  ].filter((g) => g.chave === 'meus' || g.itens.length)
+})
+
 // Troca o horário na lista pelo resumo atualizado (transferir ou assumir a edição).
 function substituir(atualizado) {
   versoes.value = versoes.value.map((v) => (v.id === atualizado.id ? atualizado : v))
@@ -453,3 +501,18 @@ async function excluir() {
   }
 }
 </script>
+
+<style scoped>
+.grupo-cabecalho {
+  border-bottom: 1px solid var(--gf-borda);
+  background: var(--bs-tertiary-bg);
+}
+/* Os que eu edito ganham destaque na cor do sistema. */
+.grupo-meus {
+  border-color: var(--gf-verde-borda, var(--gf-borda));
+}
+.grupo-meus .grupo-cabecalho {
+  background: var(--gf-verde-suave);
+  color: var(--gf-verde-escuro);
+}
+</style>
