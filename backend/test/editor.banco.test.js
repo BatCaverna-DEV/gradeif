@@ -82,6 +82,10 @@ describe.skipIf(!banco)('editor do horário', () => {
     await b.delete(v).expect(403)
     await b.put(`${v}/atribuicoes/${atribuicao.id}`).send({}).expect(403)
     await b.delete(`${v}/atribuicoes/${atribuicao.id}`).expect(403)
+    await b
+      .post(`${v}/atribuicoes/excluir`)
+      .send({ ids: [atribuicao.id] })
+      .expect(403)
     await b.post(`${v}/edicao/posicionar`).send({ movimentos: [] }).expect(403)
     await b.post(`${v}/edicao/aulas`).send({}).expect(403)
     const professor = await db('professor').first('id')
