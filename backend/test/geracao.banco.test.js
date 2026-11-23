@@ -389,6 +389,41 @@ describe.skipIf(!banco)('geração na interface (API)', () => {
         .expect(409)
     })
 
+    it('tira várias disciplinas do horário de uma vez, tudo ou nada', async () => {
+      const a = (await agente.post(base()).send({ nome: 'A' }).expect(201)).body
+      const b = (await agente.post(base()).send({ nome: 'B' }).expect(201)).body
+      const url = `${base()}/${a.id}/atribuicoes`
+      const [x, y, z] = (await agente.get(url)).body.atribuicoes
+      const deB = (await agente.get(`${base()}/${b.id}/atribuicoes`)).body.atribuicoes
+
+      // Uma de outro horário na lista: nenhuma sai.
+      await agente
+        .post(`${url}/excluir`)
+        .send({ ids: [x.id, deB[0].id] })
+        .expect(404)
+      expect((await agente.get(url)).body.atribuicoes).toHaveLength(3)
+      await agente.post(`${url}/excluir`).send({ ids: [] }).expect(400)
+
+      const r = (
+        await agente
+          .post(`${url}/excluir`)
+          .send({ ids: [x.id, y.id, x.id] })
+          .expect(200)
+      ).body
+      expect(r).toEqual({ excluidas: 2, aulasRemovidas: 0 })
+      const depois = (await agente.get(url)).body
+      expect(depois.atribuicoes.map((t) => t.id)).toEqual([z.id])
+      expect(depois.foraDoHorario).toHaveLength(2)
+      // O outro horário não muda.
+      expect((await agente.get(`${base()}/${b.id}/atribuicoes`)).body.atribuicoes).toHaveLength(3)
+
+      await db('versao_grade').where({ id: a.id }).update({ publicada: true })
+      await agente
+        .post(`${url}/excluir`)
+        .send({ ids: [z.id] })
+        .expect(409)
+    })
+
     it('cria atribuição nova só no horário, para uma turma nova, e gera com ela', async () => {
       const a = (await agente.post(base()).send({ nome: 'A' }).expect(201)).body
       const b = (await agente.post(base()).send({ nome: 'B' }).expect(201)).body

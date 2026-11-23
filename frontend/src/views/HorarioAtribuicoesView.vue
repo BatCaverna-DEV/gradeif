@@ -79,8 +79,22 @@
     </div>
 
     <BCard no-body class="mb-3">
+      <div
+        v-if="editavel && selecionadas.length"
+        class="barra-selecao d-flex flex-wrap align-items-center gap-2 px-3 py-2 border-bottom"
+      >
+        <strong class="small">{{ selecionadas.length }} selecionada(s)</strong>
+        <BButton size="sm" variant="link" class="p-0" @click="selecionadas = []"
+          >Limpar seleção</BButton
+        >
+        <BButton size="sm" variant="danger" class="ms-auto" @click="pedirExclusaoEmLote"
+          >Tirar do horário</BButton
+        >
+      </div>
       <div class="p-2">
         <TabelaDados
+          v-model:selecionados="selecionadas"
+          selecionavel
           :itens="atribuicoes"
           :campos="COLUNAS"
           :campos-busca="BUSCA"
@@ -278,6 +292,33 @@
       <p class="small text-body-secondary mb-0">
         A oferta não muda: dá para trazer a disciplina de volta na lista "Da oferta, fora deste
         horário".
+      </p>
+    </BModal>
+
+    <BModal
+      v-model="lote.visivel"
+      title="Tirar do horário"
+      :ok-title="`Tirar ${lote.itens.length}`"
+      ok-variant="danger"
+      cancel-title="Cancelar"
+      :ok-disabled="lote.salvando"
+      @ok.prevent="excluirEmLote"
+    >
+      <BAlert :model-value="!!lote.erro" variant="danger" class="small">{{ lote.erro }}</BAlert>
+      <p>
+        Tirar <strong>{{ lote.itens.length }} atribuição(ões)</strong> deste horário?
+      </p>
+      <ul class="lista-lote small mb-2">
+        <li v-for="a in lote.itens" :key="a.id">
+          <strong>{{ a.turma }} · {{ a.disciplina }}</strong> — {{ a.disciplinaNome }}
+          <span v-if="a.aulasAlocadas" class="text-danger">({{ a.aulasAlocadas }} aula(s))</span>
+        </li>
+      </ul>
+      <p v-if="lote.aulas" class="text-danger small">
+        As {{ lote.aulas }} aula(s) delas na grade deste horário também saem.
+      </p>
+      <p class="small text-body-secondary mb-0">
+        A oferta não muda: dá para trazer de volta na lista "Da oferta, fora deste horário".
       </p>
     </BModal>
   </div>
@@ -637,6 +678,44 @@ async function excluir() {
   }
 }
 
+// Várias de uma vez: tudo ou nada (se uma falhar, nenhuma sai).
+const selecionadas = ref([])
+const lote = reactive({ visivel: false, itens: [], aulas: 0, erro: '', salvando: false })
+
+function pedirExclusaoEmLote() {
+  sucesso.value = ''
+  const marcadas = new Set(selecionadas.value)
+  const itens = atribuicoes.value.filter((a) => marcadas.has(a.id))
+  if (!itens.length) return
+  Object.assign(lote, {
+    visivel: true,
+    itens,
+    aulas: itens.reduce((s, a) => s + (a.aulasAlocadas || 0), 0),
+    erro: '',
+    salvando: false,
+  })
+}
+
+async function excluirEmLote() {
+  lote.salvando = true
+  lote.erro = ''
+  try {
+    const r = await http.post(`${base.value}/atribuicoes/excluir`, {
+      ids: lote.itens.map((a) => a.id),
+    })
+    lote.visivel = false
+    selecionadas.value = []
+    sucesso.value =
+      `${r.excluidas} atribuição(ões) saíram deste horário` +
+      (r.aulasRemovidas ? `, com ${r.aulasRemovidas} aula(s) da grade.` : '.')
+    await carregar()
+  } catch (e) {
+    lote.erro = mensagemDeErro(e)
+  } finally {
+    lote.salvando = false
+  }
+}
+
 async function adicionar() {
   ocupado.value = true
   erro.value = ''
@@ -652,3 +731,17 @@ async function adicionar() {
   }
 }
 </script>
+
+<style scoped>
+.barra-selecao {
+  background: var(--bs-danger-bg-subtle);
+  position: sticky;
+  top: 0;
+  z-index: 2;
+}
+.lista-lote {
+  max-height: 14rem;
+  overflow-y: auto;
+  padding-left: 1.1rem;
+}
+</style>

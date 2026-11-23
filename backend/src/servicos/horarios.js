@@ -85,6 +85,20 @@ export async function excluirAtribuicao(periodoId, versaoId, id) {
   return db.transaction((trx) => regras.excluir(trx, id, periodoId, versaoId))
 }
 
+// Tira várias disciplinas deste horário de uma vez, com as aulas delas. Tudo ou
+// nada: se uma não for deste horário, nenhuma sai.
+export async function excluirAtribuicoes(periodoId, versaoId, ids) {
+  await exigirHorario(periodoId, versaoId, { paraEditar: true })
+  const unicos = [...new Set(ids)]
+  return db.transaction(async (trx) => {
+    let aulasRemovidas = 0
+    for (const id of unicos) {
+      aulasRemovidas += (await regras.excluir(trx, id, periodoId, versaoId)).aulasRemovidas
+    }
+    return { excluidas: unicos.length, aulasRemovidas }
+  })
+}
+
 // Atribuição nova só deste horário (turma criada no semestre, disciplina extra...).
 export async function criarAtribuicao(periodoId, versaoId, corpo) {
   await exigirHorario(periodoId, versaoId, { paraEditar: true })

@@ -4,6 +4,7 @@
 //   PUT    /api/periodos/:periodoId/versoes/:versaoId/atribuicoes/:id        { professores, aulasSemanais, tamanhoBloco, grupoParalelo }
 //   DELETE /api/periodos/:periodoId/versoes/:versaoId/atribuicoes/:id        tira do horário (com as aulas)
 //   POST   /api/periodos/:periodoId/versoes/:versaoId/atribuicoes/adicionar  { ids: [atribuições da oferta] }
+//   POST   /api/periodos/:periodoId/versoes/:versaoId/atribuicoes/excluir    { ids } tira várias do horário (com as aulas)
 //   POST   /api/periodos/:periodoId/versoes/:versaoId/atribuicoes/:id/restaurar   volta ao que está na oferta
 import { Router } from 'express'
 import { z } from 'zod'
@@ -39,6 +40,19 @@ rotas.post(
   async (req, res) => {
     const { periodoId, versaoId } = req.params
     res.status(201).json(await servico.adicionarDaOferta(periodoId, versaoId, req.body.ids))
+  }
+)
+
+// Tira várias do horário de uma vez (com as aulas delas).
+rotas.post(
+  '/excluir',
+  validar({
+    params: Horario,
+    body: z.object({ ids: z.array(z.number().int().positive()).min(1).max(1000) }),
+  }),
+  async (req, res) => {
+    const { periodoId, versaoId } = req.params
+    res.json(await servico.excluirAtribuicoes(periodoId, versaoId, req.body.ids))
   }
 )
 
