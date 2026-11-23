@@ -112,7 +112,27 @@
             </template>
           </div>
           <div :class="{ 'opacity-50': ocupado }">
+            <GradeDias
+              v-if="visao === 'dias'"
+              :grade-horaria="gradeHoraria"
+              :turno-id="recursoId"
+              :turmas="turmasDoHorario"
+              :aulas="aulasVisiveis"
+              :aulas-da-semana="aulas"
+              :destaque="destaque"
+              :editavel="editavel"
+              :celulas="simulacao"
+              :turma-alvo="turmaAlvo"
+              :selecionada="selecao?.tipo === 'aula' ? selecao.aula.id : null"
+              :mostrar-professor="selecao?.tipo === 'faltante'"
+              :titulo="`Turno ${rotuloRecurso}, todos os dias`"
+              @selecionar="selecionarAula"
+              @arrastar="selecionarAula($event, true)"
+              @clicar-celula="escolherDestino($event, null)"
+              @soltar="escolherDestino($event.horarioId, $event.aulaAlvo)"
+            />
             <GradeSemanal
+              v-else
               :grade-horaria="gradeHoraria"
               :aulas="aulasVisiveis"
               :visao="visao"
@@ -310,6 +330,7 @@ import { http, mensagemDeErro } from '@/api/http'
 import { useAuthStore } from '@/stores/auth'
 import { usePeriodoStore } from '@/stores/periodo'
 import EditorDoHorario from '@/components/EditorDoHorario.vue'
+import GradeDias from '@/components/GradeDias.vue'
 import GradeSemanal from '@/components/GradeSemanal.vue'
 import PainelViolacoes from '@/components/PainelViolacoes.vue'
 import { DIAS, formatarNumero } from '@/utils/formato'
@@ -320,6 +341,8 @@ const VISOES = [
   { valor: 'turma', rotulo: 'Turma' },
   { valor: 'professor', rotulo: 'Professor' },
   { valor: 'sala', rotulo: 'Sala' },
+  // Um turno com todos os dias de uma vez e as turmas lado a lado.
+  { valor: 'dias', rotulo: 'Dias' },
 ]
 
 const periodoStore = usePeriodoStore()
@@ -384,7 +407,7 @@ async function carregar() {
   }
 }
 
-// ---------- Visão (turma, professor, sala) ----------
+// ---------- Visão (turma, professor, sala, dia) ----------
 const visao = ref(VISOES.some((v) => v.valor === rota.query.visao) ? rota.query.visao : 'turma')
 const recursoId = ref(Number(rota.query.recurso) || null)
 
@@ -405,6 +428,10 @@ const opcoesRecurso = computed(() => {
     return turmasDoHorario.value.map((t) => ({ value: t.id, text: t.codigo }))
   if (visao.value === 'professor')
     return professores.value.map((p) => ({ value: p.id, text: p.nome }))
+  if (visao.value === 'dias')
+    return (gradeHoraria.value?.turnos ?? [])
+      .filter((t) => turmasDoHorario.value.some((x) => turnosDaTurma(x.id).has(t.id)))
+      .map((t) => ({ value: t.id, text: t.nome }))
   return salas.value.filter((s) => s.ativa).map((s) => ({ value: s.id, text: s.nome }))
 })
 const rotuloRecurso = computed(
@@ -428,9 +455,33 @@ watch([visao, recursoId], () => {
   })
 })
 
+const horarioPorId = computed(
+  () => new Map((gradeHoraria.value?.horarios ?? []).map((h) => [h.id, h]))
+)
+
+// Turnos em que a turma tem aula na semana; sem nenhuma aula, os permitidos.
+const turnosEmUso = computed(() => {
+  const mapa = new Map()
+  for (const a of aulas.value) {
+    const h = horarioPorId.value.get(a.horarioId)
+    if (!h) continue
+    if (!mapa.has(a.turmaId)) mapa.set(a.turmaId, new Set())
+    mapa.get(a.turmaId).add(h.turnoId)
+  }
+  return mapa
+})
+function turnosDaTurma(turmaId) {
+  return (
+    turnosEmUso.value.get(turmaId) ??
+    new Set(turmas.value.find((t) => t.id === turmaId)?.turnos ?? [])
+  )
+}
+
 function daVisao(a) {
   if (visao.value === 'turma') return a.turmaId === recursoId.value
   if (visao.value === 'professor') return a.professores.some((p) => p.id === recursoId.value)
+  if (visao.value === 'dias')
+    return horarioPorId.value.get(a.horarioId)?.turnoId === recursoId.value
   return a.salaId === recursoId.value
 }
 const aulasVisiveis = computed(() => aulas.value.filter(daVisao))
@@ -457,6 +508,8 @@ const arrastandoFaltante = ref(false)
 const sel = computed(() =>
   selecao.value?.tipo === 'aula' ? selecao.value.aula : selecao.value?.faltante
 )
+// Na visão por dia, a simulação pinta só a coluna da turma da aula escolhida.
+const turmaAlvo = computed(() => sel.value?.turmaId ?? null)
 
 const instrucao = computed(() => {
   if (!editavel.value) return 'Somente leitura'
@@ -508,7 +561,15 @@ function selecionarFaltante(f) {
     return limparSelecao()
   selecao.value = { tipo: 'faltante', faltante: f }
   destaque.value = new Set()
-  if (visao.value !== 'turma' || recursoId.value !== f.turmaId) trocarVisao('turma', f.turmaId)
+  if (visao.value === 'dias') {
+    // As turmas ficam lado a lado: só troca de turno se a turma não puder ter aula neste.
+    const permitidos = turmas.value.find((t) => t.id === f.turmaId)?.turnos ?? []
+    const turnos = turnosDaTurma(f.turmaId)
+    if (!turnos.has(recursoId.value) && !permitidos.includes(recursoId.value))
+      trocarVisao('dias', [...turnos][0] ?? permitidos[0])
+  } else if (visao.value !== 'turma' || recursoId.value !== f.turmaId) {
+    trocarVisao('turma', f.turmaId)
+  }
   simular({ atribuicaoId: f.atribuicaoId })
 }
 
@@ -780,13 +841,13 @@ const faltantesVisiveis = computed(() =>
     ? faltantes.value.filter((f) => f.turmaId === recursoId.value)
     : faltantes.value
 )
-const totalFaltantes = computed(() =>
-  faltantesVisiveis.value.reduce((s, f) => s + f.faltam, 0)
-)
+const totalFaltantes = computed(() => faltantesVisiveis.value.reduce((s, f) => s + f.faltam, 0))
 const aRevisar = computed(() => aulas.value.filter((a) => a.revisar))
 
 function irParaAula(a) {
-  trocarVisao('turma', a.turmaId)
+  // Na visão por dias, vai para o turno da aula; nas outras, para a turma dela.
+  if (visao.value === 'dias') trocarVisao('dias', horarioPorId.value.get(a.horarioId)?.turnoId)
+  else trocarVisao('turma', a.turmaId)
   selecionarAula(a)
 }
 
