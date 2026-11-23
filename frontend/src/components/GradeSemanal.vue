@@ -39,11 +39,12 @@
                     aulasDa(turno.id, d, tempo.ordem).length > 1 &&
                     !paralelas(turno.id, d, tempo.ordem),
                   'celula-alvo': soltandoEm === horarioDe(turno.id, d, tempo.ordem),
+                  'celula-fechada': fechada(turno.id, d, tempo.ordem),
                 },
                 classeNivel(turno.id, d, tempo.ordem),
               ]"
               :title="dicaCelula(turno.id, d, tempo.ordem)"
-              @click="editavel && emit('clicar-celula', horarioDe(turno.id, d, tempo.ordem))"
+              @click="aoClicarCelula(turno.id, d, tempo.ordem)"
               @dragover="aoPassar($event, turno.id, d, tempo.ordem)"
               @dragleave="soltandoEm = null"
               @drop.prevent="aoSoltar(turno.id, d, tempo.ordem, null)"
@@ -120,8 +121,14 @@ const props = defineProps({
   visao: { type: String, default: 'turma' }, // turma | professor | sala
   destaque: { type: Set, default: () => new Set() },
   titulo: { type: String, default: 'Grade semanal' },
-  // Na visão por turma, os turnos permitidos aparecem mesmo vazios.
+  // Turnos que aparecem só se não houver nenhuma aula (consulta pública).
   turnosFixos: { type: Array, default: () => [] },
+  // Turnos que aparecem sempre, além dos que têm aula: na visão por turma, os
+  // turnos com algum tempo aberto na disponibilidade da turma.
+  turnosAbertos: { type: Array, default: () => [] },
+  // Tempos (horarioId) em que a turma não pode ter aula: ficam riscados e não
+  // recebem aula nova.
+  fechados: { type: Set, default: () => new Set() },
   editavel: { type: Boolean, default: false },
   celulas: { type: Map, default: null }, // horarioId → { nivel, professor, motivos }
   selecionada: { type: Number, default: null }, // id da aula selecionada
@@ -170,11 +177,21 @@ function marcaProfessor(turno, dia, ordem) {
   return p === 'livre' || p === 'evitar' ? p : null
 }
 
+const fechada = (turno, dia, ordem) => props.fechados.has(horarioDe(turno, dia, ordem))
+const AVISO_FECHADO = 'Turma indisponível neste horário (veja a disponibilidade da turma)'
+
 function dicaCelula(turno, dia, ordem) {
   const c = celulaDe(turno, dia, ordem)
-  if (!c) return undefined
+  const aviso = fechada(turno, dia, ordem) ? [AVISO_FECHADO] : []
+  if (!c) return aviso.length ? aviso[0] : undefined
   const professor = props.mostrarProfessor && c.professor ? [ROTULOS_PROFESSOR[c.professor]] : []
-  return [ROTULOS_NIVEL[c.nivel], ...professor, ...(c.motivos ?? [])].join('\n')
+  return [...aviso, ROTULOS_NIVEL[c.nivel], ...professor, ...(c.motivos ?? [])].join('\n')
+}
+
+// Tempo fechado não recebe aula nova (clique ou arraste numa célula vazia dele).
+function aoClicarCelula(turno, dia, ordem) {
+  if (!props.editavel || fechada(turno, dia, ordem)) return
+  emit('clicar-celula', horarioDe(turno, dia, ordem))
 }
 
 // ---------- Arrastar e soltar ----------
@@ -192,8 +209,10 @@ function aoTerminarArraste() {
   emit('arrastar-fim')
 }
 
+// Num tempo fechado, só aceita soltar sobre uma aula (troca).
 function aoPassar(evento, turno, dia, ordem) {
   if (!props.editavel) return
+  if (fechada(turno, dia, ordem) && !aulasDa(turno, dia, ordem).length) return
   evento.preventDefault()
   soltandoEm.value = horarioDe(turno, dia, ordem)
 }
@@ -201,6 +220,7 @@ function aoPassar(evento, turno, dia, ordem) {
 function aoSoltar(turno, dia, ordem, aulaAlvo) {
   soltandoEm.value = null
   if (!props.editavel) return
+  if (!aulaAlvo && fechada(turno, dia, ordem)) return
   emit('soltar', { horarioId: horarioDe(turno, dia, ordem), aulaAlvo })
 }
 
@@ -233,10 +253,10 @@ function paralelas(turno, dia, ordem) {
   )
 }
 
-// Só os turnos em que há aula. Sem nenhuma aula, os turnos permitidos da turma
-// (turnosFixos); sem eles também, todos.
+// Os turnos em que há aula e os abertos (turnosAbertos). Sem nenhum deles, os
+// turnosFixos; sem eles também, todos.
 const turnosVisiveis = computed(() => {
-  const usados = new Set()
+  const usados = new Set(props.turnosAbertos)
   for (const a of props.aulas) {
     const h = horarioPorId.value.get(a.horarioId)
     if (h) usados.add(h.turnoId)
@@ -377,6 +397,15 @@ function descricao(a) {
 }
 .celula-choque {
   background: var(--bs-danger-bg-subtle);
+}
+/* Tempo fechado para a turma: riscado por cima da cor que a célula tiver. */
+.grade td.celula-fechada {
+  background-image: repeating-linear-gradient(
+    135deg,
+    transparent 0 6px,
+    rgba(var(--bs-secondary-rgb), 0.18) 6px 8px
+  );
+  cursor: not-allowed;
 }
 .nivel-livre {
   background: var(--bs-success-bg-subtle);

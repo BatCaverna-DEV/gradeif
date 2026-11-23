@@ -116,7 +116,8 @@
               :aulas="aulasVisiveis"
               :visao="visao"
               :destaque="destaque"
-              :turnos-fixos="turnosFixos"
+              :turnos-abertos="turnosAbertosDaVisao"
+              :fechados="fechadosDaVisao"
               :titulo="`Grade de ${rotuloRecurso}`"
               @selecionar="selecionarAula"
             />
@@ -189,6 +190,7 @@ import EditorDoHorario from '@/components/EditorDoHorario.vue'
 import GradeSemanal from '@/components/GradeSemanal.vue'
 import PainelViolacoes from '@/components/PainelViolacoes.vue'
 import { DIAS, formatarDataHora, formatarNumero } from '@/utils/formato'
+import { mapaDeIndisponiveis, temposFechados, turnosAbertos } from '@/utils/disponibilidadeTurma'
 
 const props = defineProps({ id: { type: Number, required: true } })
 
@@ -212,6 +214,7 @@ const gradeHoraria = ref(null)
 const turmas = ref([])
 const atribuicoes = ref([])
 const restricoes = ref([])
+const indisponiveis = ref(new Map()) // turmaId → Set(horarioId) indisponível neste horário
 
 const visao = ref(VISOES.some((v) => v.valor === rota.query.visao) ? rota.query.visao : 'turma')
 const recursoId = ref(Number(rota.query.recurso) || null)
@@ -226,14 +229,16 @@ async function carregar() {
   erro.value = ''
   const base = `/periodos/${periodoId}`
   try {
-    const [v, a, grade, t, at, r] = await Promise.all([
+    const [v, a, grade, t, at, r, disp] = await Promise.all([
       http.get(`${base}/versoes/${props.id}`),
       http.get(`${base}/versoes/${props.id}/aulas`),
       http.get(`${base}/grade-horaria`),
       http.get(`${base}/dados/turmas`),
       http.get(`${base}/dados/atribuicoes`),
       http.get(`${base}/restricoes`),
+      http.get(`${base}/disponibilidade/turmas?versao=${props.id}`),
     ])
+    indisponiveis.value = mapaDeIndisponiveis(disp)
     versao.value = v
     aulas.value = a
     gradeHoraria.value = grade
@@ -303,8 +308,21 @@ function daVisao(a, tipo = visao.value, id = recursoId.value) {
 }
 
 const aulasVisiveis = computed(() => aulas.value.filter((a) => daVisao(a)))
-const turnosFixos = computed(() =>
-  visao.value === 'turma' ? (turmas.value.find((t) => t.id === recursoId.value)?.turnos ?? []) : []
+
+// Na visão por turma, aparecem os turnos com algum tempo aberto na disponibilidade
+// da turma neste horário, e os tempos fechados ficam riscados.
+const turmaDaVisao = computed(() =>
+  visao.value === 'turma' ? turmas.value.find((t) => t.id === recursoId.value) : null
+)
+const turnosAbertosDaVisao = computed(() =>
+  turmaDaVisao.value
+    ? [...turnosAbertos(turmaDaVisao.value, gradeHoraria.value.horarios, indisponiveis.value)]
+    : []
+)
+const fechadosDaVisao = computed(() =>
+  turmaDaVisao.value
+    ? temposFechados(turmaDaVisao.value, gradeHoraria.value.horarios, indisponiveis.value)
+    : new Set()
 )
 
 // ---------- Violações ----------

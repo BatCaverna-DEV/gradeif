@@ -82,6 +82,35 @@ describe.skipIf(!banco)('disponibilidade por horário', () => {
     ])
   })
 
+  it('lista os tempos fechados de cada turma no horário', async () => {
+    const a = (await gestor.post(`/api/periodos/${periodoId}/versoes`).send({ nome: 'A' })).body
+    const turma = await db('turma').where({ periodo_id: periodoId }).orderBy('id').first()
+    const daTurma = `${base()}/turma/${turma.id}?versao=${a.id}`
+    await gestor
+      .put(daTurma)
+      .send({
+        itens: [
+          { horarioId: horarios[2].id, rigida: true },
+          { horarioId: horarios[0].id, rigida: true },
+        ],
+      })
+      .expect(200)
+    // Ana (professora) indisponível não entra: a lista é só de turmas.
+    await gestor
+      .put(daAna(a.id))
+      .send({ itens: [{ horarioId: horarios[1].id, rigida: true }] })
+      .expect(200)
+
+    const r = (await gestor.get(`${base()}/turmas?versao=${a.id}`).expect(200)).body
+    expect(r).toEqual({
+      versaoId: a.id,
+      turmas: [{ turmaId: turma.id, horarios: [horarios[0].id, horarios[2].id] }],
+    })
+    // O padrão do período e os outros horários não mudam.
+    expect((await gestor.get(`${base()}/turmas`).expect(200)).body.turmas).toEqual([])
+    await gestor.get(`${base()}/turmas?versao=9999`).expect(404)
+  })
+
   it('horário publicado não muda e o professor só mexe no padrão', async () => {
     const a = (await gestor.post(`/api/periodos/${periodoId}/versoes`).send({ nome: 'A' })).body
     await db('versao_grade').where({ id: a.id }).update({ publicada: true })
@@ -104,6 +133,7 @@ describe.skipIf(!banco)('disponibilidade por horário', () => {
       .send({ email: 'ana@teste.local', senha: 'senha-ana-1' })
     await professora.get(daAna(a.id)).expect(403)
     await professora.get(`${base()}/professores?versao=${a.id}`).expect(403)
+    await professora.get(`${base()}/turmas?versao=${a.id}`).expect(403)
     await professora
       .put(daAna())
       .send({ itens: [{ horarioId: horarios[3].id, rigida: false }] })

@@ -2,9 +2,9 @@
   Grade de um turno com todos os dias de uma vez: os dias e os tempos nas
   linhas (o dia ocupa as linhas dos seus tempos) e as turmas nas colunas.
   Serve para mexer em todas as turmas do turno vendo a semana inteira.
-  Entram as turmas que têm aula no turno em algum dia; turma ainda sem aula entra
-  nos turnos permitidos; a turma da aula escolhida também, para mostrar todos os
-  lugares possíveis.
+  Entram as turmas que têm aula no turno em algum dia e as que têm algum tempo
+  aberto nele (turno permitido e não marcado como indisponível na disponibilidade
+  da turma neste horário). Os tempos fechados ficam riscados e não recebem aula nova.
   Como na grade semanal, o componente só emite eventos. A simulação (celulas:
   Map horarioId → { nivel, motivos }) vale para a aula escolhida, então só pinta
   a coluna da turma dela (turmaAlvo). Nas outras colunas, soltar ou clicar sobre
@@ -58,6 +58,7 @@
                   'celula-choque': choqueNaCelula(t.id, d, tempo.ordem),
                   'celula-alvo': soltandoEm === chaveCelula(t.id, d, tempo.ordem),
                   'coluna-alvo': t.id === turmaAlvo,
+                  'celula-fechada': fechada(t.id, d, tempo.ordem),
                 },
                 classeNivel(t.id, d, tempo.ordem),
               ]"
@@ -132,6 +133,7 @@
 <script setup>
 import { computed, ref } from 'vue'
 import { DIAS } from '@/utils/formato'
+import { temposFechados } from '@/utils/disponibilidadeTurma'
 
 const props = defineProps({
   gradeHoraria: { type: Object, required: true }, // { dias, turnos, horarios } da API
@@ -146,6 +148,8 @@ const props = defineProps({
   turmaAlvo: { type: Number, default: null }, // turma da aula escolhida
   selecionada: { type: Number, default: null }, // id da aula selecionada
   mostrarProfessor: { type: Boolean, default: false },
+  // Disponibilidade das turmas neste horário: Map(turmaId → Set(horarioId fechado)).
+  indisponiveis: { type: Map, default: () => new Map() },
 })
 const emit = defineEmits(['selecionar', 'clicar-celula', 'arrastar', 'arrastar-fim', 'soltar'])
 
@@ -204,13 +208,25 @@ const turnosEmUso = computed(() => {
   return mapa
 })
 
+// Tempos fechados de cada turma (turno não permitido ou indisponível).
+const fechadosPorTurma = computed(
+  () =>
+    new Map(
+      props.turmas.map((t) => [
+        t.id,
+        temposFechados(t, props.gradeHoraria.horarios, props.indisponiveis),
+      ])
+    )
+)
+const fechada = (turma, dia, ordem) =>
+  fechadosPorTurma.value.get(turma)?.has(horarioDe(dia, ordem)) ?? false
+
 const colunas = computed(() => {
+  const doTurno = props.gradeHoraria.horarios.filter((h) => h.turnoId === props.turnoId)
   const aparece = (t) => {
-    const permitido = (t.turnos ?? []).includes(props.turnoId)
-    const emUso = turnosEmUso.value.get(t.id)
-    if (emUso?.has(props.turnoId)) return true
-    if (t.id === props.turmaAlvo) return permitido
-    return !emUso && permitido
+    if (turnosEmUso.value.get(t.id)?.has(props.turnoId)) return true
+    const fechados = fechadosPorTurma.value.get(t.id)
+    return doTurno.some((h) => !fechados?.has(h.id))
   }
   return props.turmas
     .filter(aparece)
@@ -262,18 +278,24 @@ function marcaProfessor(turma, dia, ordem) {
   const p = celulaDe(turma, dia, ordem)?.professor
   return p === 'livre' || p === 'evitar' ? p : null
 }
+const AVISO_FECHADO = 'Turma indisponível neste horário (veja a disponibilidade da turma)'
+
 function dicaCelula(turma, dia, ordem) {
   const c = celulaDe(turma, dia, ordem)
-  if (!c) return undefined
+  const aviso = fechada(turma, dia, ordem) ? [AVISO_FECHADO] : []
+  if (!c) return aviso.length ? aviso[0] : undefined
   const professor = props.mostrarProfessor && c.professor ? [ROTULOS_PROFESSOR[c.professor]] : []
-  return [ROTULOS_NIVEL[c.nivel], ...professor, ...(c.motivos ?? [])].join('\n')
+  return [...aviso, ROTULOS_NIVEL[c.nivel], ...professor, ...(c.motivos ?? [])].join('\n')
 }
 
 // ---------- Clique, arrastar e soltar ----------
 const soltandoEm = ref(null)
 
+// Aula nova só na coluna da turma da aula escolhida e num tempo aberto para ela.
+const recebeAula = (turma, dia, ordem) => turma === props.turmaAlvo && !fechada(turma, dia, ordem)
+
 function aoClicarCelula(turma, dia, ordem) {
-  if (!props.editavel || turma !== props.turmaAlvo) return
+  if (!props.editavel || !recebeAula(turma, dia, ordem)) return
   emit('clicar-celula', horarioDe(dia, ordem))
 }
 
@@ -289,10 +311,10 @@ function aoTerminarArraste() {
   emit('arrastar-fim')
 }
 
-// Aceita soltar na coluna da turma da aula ou sobre outra aula (troca).
+// Aceita soltar num tempo aberto da coluna da turma da aula ou sobre outra aula (troca).
 function aoPassar(evento, turma, dia, ordem) {
   if (!props.editavel) return
-  if (turma !== props.turmaAlvo && !aulasDa(turma, dia, ordem).length) return
+  if (!recebeAula(turma, dia, ordem) && !aulasDa(turma, dia, ordem).length) return
   evento.preventDefault()
   soltandoEm.value = chaveCelula(turma, dia, ordem)
 }
@@ -300,7 +322,7 @@ function aoPassar(evento, turma, dia, ordem) {
 function aoSoltar(turma, dia, ordem, aulaAlvo) {
   soltandoEm.value = null
   if (!props.editavel) return
-  if (!aulaAlvo && turma !== props.turmaAlvo) return
+  if (!aulaAlvo && !recebeAula(turma, dia, ordem)) return
   emit('soltar', { horarioId: horarioDe(dia, ordem), aulaAlvo })
 }
 
@@ -499,6 +521,15 @@ tbody tr:first-child > * {
 }
 .nivel-atual {
   box-shadow: inset 0 0 0 2px var(--bs-primary);
+}
+/* Tempo fechado para a turma: riscado por cima da cor que a célula tiver. */
+.grade td.celula-fechada {
+  background-image: repeating-linear-gradient(
+    135deg,
+    transparent 0 6px,
+    rgba(var(--bs-secondary-rgb), 0.18) 6px 8px
+  );
+  cursor: not-allowed;
 }
 .celula-alvo {
   box-shadow: inset 0 0 0 3px var(--bs-primary);
