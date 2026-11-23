@@ -13,7 +13,8 @@ export const ENTIDADES = [
     chave: 'professores',
     titulo: 'Professores',
     compartilhado: true,
-    // Professores podem ser cadastrados à mão (os demais cadastros vêm da planilha).
+    // Professores, turmas, disciplinas e salas podem ser cadastrados à mão; as
+    // atribuições da oferta vêm da planilha.
     novo: {
       rotulo: 'Novo professor',
       valores: { nome: '', siape: '', email: '', cor: '', cargaMaxima: 20, ativo: true },
@@ -195,6 +196,10 @@ export const ENTIDADES = [
     chave: 'salas',
     titulo: 'Salas',
     compartilhado: true,
+    novo: {
+      rotulo: 'Nova sala',
+      valores: { nome: '', tipo: 'sala', capacidade: 40, ativa: true },
+    },
     placeholder: 'Buscar por nome ou tipo',
     colunas: [
       { key: 'nome', label: 'Nome', sortable: true },
