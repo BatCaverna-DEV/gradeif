@@ -82,7 +82,8 @@ describe('instância do problema', () => {
     expect(inst.prox[0]).toBe(1)
     expect(inst.prox[3]).toBe(-1)
     expect(inst.rotuloHorario(0)).toBe('segunda, 1º tempo (Matutino)')
-    expect(inst.interjornada).toEqual({ noite: 2, manha: 0 })
+    expect(inst.interjornada).toMatchObject({ noite: 2, manha: 0 })
+    expect(inst.temSobreposicao).toBe(false)
   })
 
   it('divide a capacidade necessária entre os grupos paralelos', () => {

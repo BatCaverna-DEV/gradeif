@@ -221,8 +221,8 @@ function interjornadas(g, p, cfg) {
   const manha = new Uint8Array(9)
   for (const i of g.porProfessor[p]) {
     const h = g.hor[i]
-    if (inst.horTurno[h] === turnos.noite) noite[inst.horDia[h]] = 1
-    else if (inst.horTurno[h] === turnos.manha && inst.horSeq[h] < primeiros)
+    if (turnos.noites[inst.horTurno[h]]) noite[inst.horDia[h]] = 1
+    else if (turnos.manhas[inst.horTurno[h]] && inst.horSeq[h] < primeiros)
       manha[inst.horDia[h]] = 1
   }
   const dias = []
@@ -243,8 +243,8 @@ export const F3 = {
         aulas: g.porProfessor[p].filter((i) => {
           const h = g.hor[i]
           return (
-            (inst.horDia[h] === d && inst.horTurno[h] === inst.interjornada.noite) ||
-            (inst.horDia[h] === d + 1 && inst.horTurno[h] === inst.interjornada.manha)
+            (inst.horDia[h] === d && inst.interjornada.noites[inst.horTurno[h]]) ||
+            (inst.horDia[h] === d + 1 && inst.interjornada.manhas[inst.horTurno[h]])
           )
         }),
         recurso: recurso(inst, 'professor', p),

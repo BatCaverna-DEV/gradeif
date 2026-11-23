@@ -92,6 +92,54 @@ describe.skipIf(!banco)('grade horária do período', () => {
     expect((await obterGradeHoraria(periodo.periodoId)).turnos).toHaveLength(3)
   })
 
+  it('com horários criados, só aceita acrescentar turnos', async () => {
+    await db('versao_grade').insert({ periodo_id: periodo.periodoId, nome: 'Horário 1' })
+    const antes = await obterGradeHoraria(periodo.periodoId)
+
+    // Turno do superior: aulas de 1 h no mesmo período do Noturno.
+    const comSuperior = copia()
+    comSuperior.turnos.push({
+      nome: 'Superior Noturno',
+      tempos: [
+        { horaInicio: '18:30', horaFim: '19:30' },
+        { horaInicio: '19:30', horaFim: '20:30' },
+      ],
+    })
+    const depois = await definirGradeHoraria(periodo.periodoId, comSuperior)
+    expect(depois.turnos.map((t) => t.nome)).toEqual([
+      'Matutino',
+      'Vespertino',
+      'Noturno',
+      'Superior Noturno',
+    ])
+    expect(depois.turnos.slice(0, 3).map((t) => t.id)).toEqual(antes.turnos.map((t) => t.id))
+    expect(depois.horarios).toHaveLength(40)
+    const idsAntes = antes.horarios.map((h) => h.id)
+    expect(depois.horarios.filter((h) => idsAntes.includes(h.id))).toHaveLength(30)
+
+    // Salvar de novo sem mudar nada também passa.
+    await definirGradeHoraria(periodo.periodoId, comSuperior)
+
+    const recusa = (grade, motivo) =>
+      expect(definirGradeHoraria(periodo.periodoId, grade)).rejects.toMatchObject({
+        status: 409,
+        message: `Este período já tem horários: só é possível acrescentar turnos novos. ${motivo}`,
+      })
+    const outroTempo = structuredClone(comSuperior)
+    outroTempo.turnos[0].tempos[0].horaFim = '07:45'
+    await recusa(outroTempo, 'Os tempos do turno Matutino não podem mudar.')
+    const semTurno = structuredClone(comSuperior)
+    semTurno.turnos.splice(1, 1)
+    await recusa(semTurno, 'O turno Vespertino não pode ser removido nem renomeado.')
+    const semDia = structuredClone(comSuperior)
+    semDia.dias = [1, 2, 3, 4]
+    await recusa(semDia, 'Os dias letivos não podem mudar.')
+    const outroSuperior = structuredClone(comSuperior)
+    outroSuperior.turnos[3].tempos.pop()
+    await recusa(outroSuperior, 'Os tempos do turno Superior Noturno não podem mudar.')
+    expect((await obterGradeHoraria(periodo.periodoId)).horarios).toHaveLength(40)
+  })
+
   it('remove turno sem turmas e recusa nomes repetidos', async () => {
     const semNoturno = copia()
     semNoturno.turnos.pop()

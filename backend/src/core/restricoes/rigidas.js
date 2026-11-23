@@ -22,25 +22,61 @@ function celulasEmChoque(g, lista, celulas, r, fn) {
   }
 }
 
+// Pares de horários diferentes que se cruzam no relógio (turnos com tempos de
+// tamanhos diferentes no mesmo período do dia), os dois ocupados pelo recurso r.
+// Cada par aparece uma vez, com h < h2.
+function temposCruzados(g, lista, celulas, r, fn) {
+  const { inst, H } = g
+  if (!inst.temSobreposicao) return
+  const vistos = new Set()
+  for (const i of lista) {
+    const h = g.hor[i]
+    if (vistos.has(h)) continue
+    vistos.add(h)
+    for (const h2 of inst.sobre[h]) {
+      if (h2 < h) continue
+      const outra = celulas[r * H + h2]
+      if (outra?.length) fn(h, h2, celulas[r * H + h], outra)
+    }
+  }
+}
+
+const comHora = (inst, h) => {
+  const x = inst.horarios[h]
+  return `${inst.rotuloHorario(h)}, ${x.horaInicio}–${x.horaFim}`
+}
+
+// Choque de professor (R1) ou de sala (R3), no mesmo tempo ou em tempos que se
+// cruzam. Custo: aulas a mais no mesmo tempo + pares de aulas em tempos cruzados.
+function choquesDoRecurso(g, lista, celulas, r, fn) {
+  celulasEmChoque(g, lista, celulas, r, (h, cel) => fn(cel.length - 1, [...cel], h, null))
+  temposCruzados(g, lista, celulas, r, (h, h2, a, b) =>
+    fn(a.length * b.length, [...a, ...b], h, h2)
+  )
+}
+
 export const R1 = {
   codigo: 'R1',
   escopo: 'professor',
   custo(g, p) {
     let c = 0
-    celulasEmChoque(g, g.porProfessor[p], g.celProfessor, p, (_h, cel) => (c += cel.length - 1))
+    choquesDoRecurso(g, g.porProfessor[p], g.celProfessor, p, (custo) => (c += custo))
     return c
   },
   violacoes(g, p) {
     const { inst } = g
     const lista = []
-    celulasEmChoque(g, g.porProfessor[p], g.celProfessor, p, (h, cel) =>
+    choquesDoRecurso(g, g.porProfessor[p], g.celProfessor, p, (custo, aulas, h, h2) =>
       lista.push(
         criarViolacao({
           codigo: 'R1',
-          custo: cel.length - 1,
-          aulas: [...cel],
+          custo,
+          aulas,
           recurso: recurso(inst, 'professor', p),
-          mensagem: `${inst.rotuloRecurso('professor', p)} tem ${cel.length} aulas em ${inst.rotuloHorario(h)}`,
+          mensagem:
+            h2 == null
+              ? `${inst.rotuloRecurso('professor', p)} tem ${aulas.length} aulas em ${inst.rotuloHorario(h)}`
+              : `${inst.rotuloRecurso('professor', p)} tem aulas que se cruzam: ${comHora(inst, h)} e ${comHora(inst, h2)}`,
         })
       )
     )
@@ -82,8 +118,21 @@ function celulasDaTurma(g, t, fn) {
     vistos.add(h)
     const cel = g.celTurma[t * H + h]
     const c = custoCelulaTurma(g, cel)
-    if (c > 0) fn(h, cel, c)
+    if (c > 0) fn(h, cel, c, null)
   }
+  // Tempos cruzados: cada par de aulas conta, salvo partes diferentes do mesmo
+  // grupo paralelo.
+  const { atrGrupo } = g.inst
+  temposCruzados(g, g.porTurma[t], g.celTurma, t, (h, h2, a, b) => {
+    let c = 0
+    for (const i of a)
+      for (const j of b) {
+        const x = g.atr[i]
+        const y = g.atr[j]
+        if (x === y || atrGrupo[x] < 0 || atrGrupo[x] !== atrGrupo[y]) c++
+      }
+    if (c > 0) fn(h, [...a, ...b], c, h2)
+  })
 }
 
 export const R2 = {
@@ -97,14 +146,14 @@ export const R2 = {
   violacoes(g, t) {
     const { inst } = g
     const lista = []
-    celulasDaTurma(g, t, (h, cel, c) =>
+    celulasDaTurma(g, t, (h, cel, c, h2) =>
       lista.push(
         criarViolacao({
           codigo: 'R2',
           custo: c,
           aulas: [...cel],
           recurso: recurso(inst, 'turma', t),
-          mensagem: `${inst.rotuloRecurso('turma', t)} tem aulas em choque em ${inst.rotuloHorario(h)}: ${cel.map((i) => inst.rotuloAtribuicao(g.atr[i])).join(', ')}`,
+          mensagem: `${inst.rotuloRecurso('turma', t)} tem aulas em choque em ${h2 == null ? inst.rotuloHorario(h) : `${comHora(inst, h)} e ${comHora(inst, h2)}`}: ${cel.map((i) => inst.rotuloAtribuicao(g.atr[i])).join(', ')}`,
         })
       )
     )
@@ -117,20 +166,23 @@ export const R3 = {
   escopo: 'sala',
   custo(g, s) {
     let c = 0
-    celulasEmChoque(g, g.porSala[s], g.celSala, s, (_h, cel) => (c += cel.length - 1))
+    choquesDoRecurso(g, g.porSala[s], g.celSala, s, (custo) => (c += custo))
     return c
   },
   violacoes(g, s) {
     const { inst } = g
     const lista = []
-    celulasEmChoque(g, g.porSala[s], g.celSala, s, (h, cel) =>
+    choquesDoRecurso(g, g.porSala[s], g.celSala, s, (custo, aulas, h, h2) =>
       lista.push(
         criarViolacao({
           codigo: 'R3',
-          custo: cel.length - 1,
-          aulas: [...cel],
+          custo,
+          aulas,
           recurso: recurso(inst, 'sala', s),
-          mensagem: `${inst.rotuloRecurso('sala', s)} recebe ${cel.length} aulas em ${inst.rotuloHorario(h)}`,
+          mensagem:
+            h2 == null
+              ? `${inst.rotuloRecurso('sala', s)} recebe ${aulas.length} aulas em ${inst.rotuloHorario(h)}`
+              : `${inst.rotuloRecurso('sala', s)} recebe aulas que se cruzam: ${comHora(inst, h)} e ${comHora(inst, h2)}`,
         })
       )
     )

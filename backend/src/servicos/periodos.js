@@ -95,9 +95,15 @@ export async function obterGradeHoraria(periodoId) {
     .orderBy(['dia_semana', 'turno_id', 'ordem'])
 
   const dias = [...new Set(horarios.map((h) => h.dia_semana))].sort((a, b) => a - b)
+  const versoes = await db('versao_grade')
+    .where({ periodo_id: periodoId })
+    .count({ total: '*' })
+    .first()
 
   return {
     dias,
+    // Com horários criados, a grade horária só pode ganhar turnos novos.
+    soAcrescentar: Number(versoes.total) > 0,
     turnos: turnos.map((t) => {
       // Os tempos são iguais em todos os dias; usa o primeiro dia como modelo.
       const doTurno = horarios.filter((h) => h.turno_id === t.id && h.dia_semana === dias[0])
@@ -123,6 +129,37 @@ export async function obterGradeHoraria(periodoId) {
   }
 }
 
+// Com horários (versões de grade) criados, as aulas apontam para os tempos de aula:
+// a grade horária só pode ganhar turnos novos (um turno do superior com aulas de
+// 1 h, por exemplo). Dias letivos e os turnos e tempos que já existem ficam como
+// estão; a ordem de exibição dos turnos pode mudar.
+async function soAcrescentaTurnos(trx, periodoId, { dias, turnos }) {
+  const recusar = (motivo) => {
+    throw new ErroConflito(
+      `Este período já tem horários: só é possível acrescentar turnos novos. ${motivo}`
+    )
+  }
+  const existentes = await trx('turno').where({ periodo_id: periodoId })
+  const horarios = await trx('horario')
+    .where({ periodo_id: periodoId })
+    .orderBy(['turno_id', 'dia_semana', 'ordem'])
+  const diasAtuais = [...new Set(horarios.map((h) => h.dia_semana))].sort((a, b) => a - b)
+  const diasPedidos = [...new Set(dias)].sort((a, b) => a - b)
+  if (diasAtuais.join() !== diasPedidos.join()) recusar('Os dias letivos não podem mudar.')
+
+  const enviados = new Map(turnos.map((t) => [chave(t.nome), t]))
+  for (const turno of existentes) {
+    const enviado = enviados.get(chave(turno.nome))
+    if (!enviado) recusar(`O turno ${turno.nome} não pode ser removido nem renomeado.`)
+    const atuais = horarios
+      .filter((h) => h.turno_id === turno.id && h.dia_semana === diasAtuais[0])
+      .map((h) => `${horaCurta(h.hora_inicio)}-${horaCurta(h.hora_fim)}`)
+    const pedidos = enviado.tempos.map((t) => `${t.horaInicio}-${t.horaFim}`)
+    if (atuais.join() !== pedidos.join())
+      recusar(`Os tempos do turno ${turno.nome} não podem mudar.`)
+  }
+}
+
 // Ajusta turnos e horários do período ao que foi enviado, preservando os registros
 // que continuam existindo: turmas guardam ids de turno e indisponibilidades guardam
 // ids de horário. Turno é reconhecido pelo nome; horário, por turno + dia + ordem.
@@ -141,11 +178,7 @@ export async function definirGradeHoraria(periodoId, { dias, turnos }) {
       .where({ periodo_id: periodoId })
       .count({ total: '*' })
       .first()
-    if (Number(versoes.total) > 0) {
-      throw new ErroConflito(
-        'Não é possível alterar a grade horária de um período com versões de grade'
-      )
-    }
+    if (Number(versoes.total) > 0) await soAcrescentaTurnos(trx, periodoId, { dias, turnos })
 
     const existentes = await trx('turno').where({ periodo_id: periodoId })
     const porNome = new Map(existentes.map((t) => [chave(t.nome), t]))
