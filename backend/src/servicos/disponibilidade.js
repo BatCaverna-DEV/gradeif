@@ -108,6 +108,27 @@ export async function definirDisponibilidade(periodoId, tipo, recursoId, itens, 
   return obterDisponibilidade(periodoId, tipo, recursoId, versaoId)
 }
 
+// Tempos em que cada turma não pode ter aula no escopo (só marcações rígidas; turma
+// não tem "prefere evitar"). O editor e a visualização da grade usam isso para
+// mostrar os turnos da turma e bloquear os tempos fechados.
+export async function indisponiveisDasTurmas(periodoId, versaoId = null) {
+  await exigirHorario(periodoId, versaoId)
+  const linhas = await db('indisponibilidade')
+    .where({ periodo_id: periodoId, tipo_recurso: 'turma', rigida: true })
+    .modify(doEscopo(versaoId))
+    .orderBy(['recurso_id', 'horario_id'])
+    .select('recurso_id', 'horario_id')
+  const porTurma = new Map()
+  for (const l of linhas) {
+    if (!porTurma.has(l.recurso_id)) porTurma.set(l.recurso_id, [])
+    porTurma.get(l.recurso_id).push(l.horario_id)
+  }
+  return {
+    versaoId,
+    turmas: [...porTurma].map(([turmaId, horarios]) => ({ turmaId, horarios })),
+  }
+}
+
 // Copia a disponibilidade de um recurso do padrão do período para o horário,
 // substituindo a do horário (botão "usar o padrão" na tela).
 export async function copiarDoPadrao(periodoId, tipo, recursoId, versaoId) {

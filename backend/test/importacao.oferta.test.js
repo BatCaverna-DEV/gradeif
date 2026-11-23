@@ -294,6 +294,40 @@ describe.skipIf(!banco)('importação pela planilha de oferta', () => {
     expect(await db('atribuicao_professor').count({ n: '*' }).first()).toEqual({ n: 2 })
   })
 
+  it('turno novo da turma não marca aulas; turno retirado marca só as que estão nele', async () => {
+    const linha = (turno) =>
+      [
+        'Turma;Curso;Período;Disciplina;Aulas/semana;Professor;Turno;Alunos',
+        `1 TDS;Téc. Desenv. Sistemas;1º ano;Banco de Dados;3;Ana Lima;${turno};38`,
+      ].join('\n')
+    await importar(periodoId, ['oferta.csv', linha('M')])
+    const versao = await criarVersao(periodoId, { nome: 'A' })
+    const atribuicao = await db('atribuicao').where({ versao_id: versao.id }).first('id')
+    const turnos = Object.fromEntries(
+      (await db('turno').where({ periodo_id: periodoId })).map((t) => [t.nome, t.id])
+    )
+    const horario = await db('horario').where({ turno_id: turnos.Matutino }).first('id')
+    const [aula] = await db('aula').insert({
+      versao_id: versao.id,
+      atribuicao_id: atribuicao.id,
+      horario_id: horario.id,
+    })
+    const revisar = async () => (await db('aula').where({ id: aula }).first()).revisar
+
+    // M → M, V: a aula da manhã continua valendo.
+    const acrescenta = await previa(periodoId, ['oferta.csv', linha('M, V')])
+    expect(acrescenta.arquivos[0].linhas[0].mudancas.map((m) => m.chaveCampo)).toContain('turnos')
+    expect(acrescenta.impacto.aulas).toBe(0)
+    await importar(periodoId, ['oferta.csv', linha('M, V')])
+    expect(await revisar()).toBe(0)
+
+    // M, V → V: a aula da manhã fica fora do turno.
+    const retira = await previa(periodoId, ['oferta.csv', linha('V')])
+    expect(retira.arquivos[0].linhas[0].aulasParaRevisar).toBe(1)
+    await importar(periodoId, ['oferta.csv', linha('V')])
+    expect(await revisar()).toBe(1)
+  })
+
   it('não mistura a oferta com as planilhas separadas, salvo a de salas', async () => {
     const p = await previa(
       periodoId,

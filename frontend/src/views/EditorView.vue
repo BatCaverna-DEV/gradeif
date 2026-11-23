@@ -119,6 +119,7 @@
               :turmas="turmasDoHorario"
               :aulas="aulasVisiveis"
               :aulas-da-semana="aulas"
+              :indisponiveis="indisponiveis"
               :destaque="destaque"
               :editavel="editavel"
               :celulas="simulacao"
@@ -137,7 +138,8 @@
               :aulas="aulasVisiveis"
               :visao="visao"
               :destaque="destaque"
-              :turnos-fixos="turnosFixos"
+              :turnos-abertos="turnosAbertosDaVisao"
+              :fechados="fechadosDaVisao"
               :editavel="editavel"
               :celulas="simulacao"
               :selecionada="selecao?.tipo === 'aula' ? selecao.aula.id : null"
@@ -334,6 +336,7 @@ import GradeDias from '@/components/GradeDias.vue'
 import GradeSemanal from '@/components/GradeSemanal.vue'
 import PainelViolacoes from '@/components/PainelViolacoes.vue'
 import { DIAS, formatarNumero } from '@/utils/formato'
+import { mapaDeIndisponiveis, temposFechados, turnosAbertos } from '@/utils/disponibilidadeTurma'
 
 const props = defineProps({ id: { type: Number, required: true } })
 
@@ -361,6 +364,7 @@ const turmas = ref([])
 const atribuicoes = ref([])
 const salas = ref([])
 const restricoes = ref([])
+const indisponiveis = ref(new Map()) // turmaId → Set(horarioId) indisponível neste horário
 const aba = ref('faltantes')
 
 const auth = useAuthStore()
@@ -379,7 +383,7 @@ async function carregar() {
   refazer.value = []
   const periodo = `/periodos/${periodoStore.ativoId}`
   try {
-    const [v, estado, grade, t, at, s, r] = await Promise.all([
+    const [v, estado, grade, t, at, s, r, disp] = await Promise.all([
       http.get(base.value),
       http.get(`${base.value}/edicao`),
       http.get(`${periodo}/grade-horaria`),
@@ -387,7 +391,9 @@ async function carregar() {
       http.get(`${base.value}/atribuicoes`),
       http.get(`${periodo}/dados/salas`),
       http.get(`${periodo}/restricoes`),
+      http.get(`${periodo}/disponibilidade/turmas?versao=${props.id}`),
     ])
+    indisponiveis.value = mapaDeIndisponiveis(disp)
     versao.value = v
     aulas.value = estado.aulas
     avaliacao.value = estado.avaliacao
@@ -430,7 +436,7 @@ const opcoesRecurso = computed(() => {
     return professores.value.map((p) => ({ value: p.id, text: p.nome }))
   if (visao.value === 'dias')
     return (gradeHoraria.value?.turnos ?? [])
-      .filter((t) => turmasDoHorario.value.some((x) => turnosDaTurma(x.id).has(t.id)))
+      .filter((t) => turmasDoHorario.value.some((x) => turnosDaTurma(x).has(t.id)))
       .map((t) => ({ value: t.id, text: t.nome }))
   return salas.value.filter((s) => s.ativa).map((s) => ({ value: s.id, text: s.nome }))
 })
@@ -459,7 +465,10 @@ const horarioPorId = computed(
   () => new Map((gradeHoraria.value?.horarios ?? []).map((h) => [h.id, h]))
 )
 
-// Turnos em que a turma tem aula na semana; sem nenhuma aula, os permitidos.
+// ---------- Disponibilidade das turmas neste horário ----------
+// Um tempo está aberto para a turma quando o turno é permitido e ele não foi marcado
+// como indisponível. A turma aparece nos turnos em que tem aula e nos que têm algum
+// tempo aberto; os tempos fechados ficam riscados e não recebem aula nova.
 const turnosEmUso = computed(() => {
   const mapa = new Map()
   for (const a of aulas.value) {
@@ -470,12 +479,21 @@ const turnosEmUso = computed(() => {
   }
   return mapa
 })
-function turnosDaTurma(turmaId) {
-  return (
-    turnosEmUso.value.get(turmaId) ??
-    new Set(turmas.value.find((t) => t.id === turmaId)?.turnos ?? [])
-  )
+const horariosDaGrade = computed(() => gradeHoraria.value?.horarios ?? [])
+const abertosDa = (turma) => turnosAbertos(turma, horariosDaGrade.value, indisponiveis.value)
+const fechadosDa = (turma) => temposFechados(turma, horariosDaGrade.value, indisponiveis.value)
+function turnosDaTurma(turma) {
+  return new Set([...(turnosEmUso.value.get(turma?.id) ?? []), ...abertosDa(turma)])
 }
+const turmaDaVisao = computed(() =>
+  visao.value === 'turma' ? turmas.value.find((t) => t.id === recursoId.value) : null
+)
+const turnosAbertosDaVisao = computed(() =>
+  turmaDaVisao.value ? [...abertosDa(turmaDaVisao.value)] : []
+)
+const fechadosDaVisao = computed(() =>
+  turmaDaVisao.value ? fechadosDa(turmaDaVisao.value) : new Set()
+)
 
 function daVisao(a) {
   if (visao.value === 'turma') return a.turmaId === recursoId.value
@@ -485,9 +503,6 @@ function daVisao(a) {
   return a.salaId === recursoId.value
 }
 const aulasVisiveis = computed(() => aulas.value.filter(daVisao))
-const turnosFixos = computed(() =>
-  visao.value === 'turma' ? (turmas.value.find((t) => t.id === recursoId.value)?.turnos ?? []) : []
-)
 
 function rotuloHorario(horarioId) {
   const h = gradeHoraria.value?.horarios.find((x) => x.id === horarioId)
@@ -562,11 +577,9 @@ function selecionarFaltante(f) {
   selecao.value = { tipo: 'faltante', faltante: f }
   destaque.value = new Set()
   if (visao.value === 'dias') {
-    // As turmas ficam lado a lado: só troca de turno se a turma não puder ter aula neste.
-    const permitidos = turmas.value.find((t) => t.id === f.turmaId)?.turnos ?? []
-    const turnos = turnosDaTurma(f.turmaId)
-    if (!turnos.has(recursoId.value) && !permitidos.includes(recursoId.value))
-      trocarVisao('dias', [...turnos][0] ?? permitidos[0])
+    // As turmas ficam lado a lado: só troca de turno se a turma não aparece neste.
+    const turnos = turnosDaTurma(turmas.value.find((t) => t.id === f.turmaId))
+    if (turnos.size && !turnos.has(recursoId.value)) trocarVisao('dias', [...turnos][0])
   } else if (visao.value !== 'turma' || recursoId.value !== f.turmaId) {
     trocarVisao('turma', f.turmaId)
   }

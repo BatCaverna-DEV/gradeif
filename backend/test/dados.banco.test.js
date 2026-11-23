@@ -144,7 +144,53 @@ describe.skipIf(!banco)('dados (F1-21)', () => {
       expect(invalido.body.detalhes.map((d) => d.campo)).toEqual(['email', 'cargaMaxima'])
     })
 
-    it('mudar os turnos da turma marca as aulas dela para revisão', async () => {
+    const corpoINF1M = (mudancas) => ({
+      codigo: 'INF1M',
+      curso: 'Técnico em Informática',
+      nivel: 'integrado',
+      turnos: [periodo.turnos.Matutino],
+      numeroAlunos: 35,
+      ...mudancas,
+    })
+
+    it('acrescentar turno à turma não marca nenhuma aula', async () => {
+      const aula = await alocar(
+        await atribuicaoId('INF1M', 'MAT1'),
+        await id('sala', { nome: 'Sala 1' })
+      )
+      const turma = await id('turma', { codigo: 'INF1M' })
+      const { body } = await agente
+        .put(`${base}/turmas/${turma}`)
+        .send(corpoINF1M({ turnos: [periodo.turnos.Matutino, periodo.turnos.Vespertino] }))
+        .expect(200)
+      expect(body).toMatchObject({ alterados: ['turnos'], aulasMarcadas: 0 })
+      expect(await revisar(aula)).toBe(0)
+    })
+
+    it('mais alunos marca só as aulas em sala que deixa de comportar a turma', async () => {
+      const atribuicao = await atribuicaoId('INF1M', 'MAT1')
+      const naSala1 = await alocar(atribuicao, await id('sala', { nome: 'Sala 1' })) // 40 lugares
+      const noLab = await alocar(atribuicao, await id('sala', { nome: 'Lab. Informática' })) // 20
+      const turma = await id('turma', { codigo: 'INF1M' })
+
+      // Menos alunos não afeta nada.
+      const menos = await agente
+        .put(`${base}/turmas/${turma}`)
+        .send(corpoINF1M({ numeroAlunos: 30 }))
+        .expect(200)
+      expect(menos.body.aulasMarcadas).toBe(0)
+
+      // 30 → 45: a Sala 1 (40) deixa de comportar; o laboratório (20) já não comportava.
+      const mais = await agente
+        .put(`${base}/turmas/${turma}`)
+        .send(corpoINF1M({ numeroAlunos: 45 }))
+        .expect(200)
+      expect(mais.body.aulasMarcadas).toBe(1)
+      expect(await revisar(naSala1)).toBe(1)
+      expect(await revisar(noLab)).toBe(0)
+    })
+
+    it('retirar o turno da turma marca as aulas que estão nele', async () => {
       const aula = await alocar(
         await atribuicaoId('INF1M', 'MAT1'),
         await id('sala', { nome: 'Sala 1' })

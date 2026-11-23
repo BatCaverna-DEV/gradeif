@@ -202,6 +202,49 @@ describe.skipIf(!banco)('importação com banco', () => {
     expect(aulas).toHaveLength(2) // marcadas, não apagadas
   })
 
+  it('na turma, marca só as aulas do turno retirado (acrescentar turno não marca)', async () => {
+    await confirmar(periodo.periodoId, arquivos(TODOS))
+    const atribuicao = await db('atribuicao as a')
+      .join('turma as t', 't.id', 'a.turma_id')
+      .join('disciplina as d', 'd.id', 'a.disciplina_id')
+      .where({ 't.codigo': 'INF1M', 'd.sigla': 'MAT1' })
+      .first('a.id')
+    const [versaoId] = await db('versao_grade').insert({
+      periodo_id: periodo.periodoId,
+      nome: 'Teste',
+    })
+    const horario = await db('horario').where({ turno_id: periodo.turnos.Matutino }).first('id')
+    await db('aula').insert({
+      versao_id: versaoId,
+      atribuicao_id: atribuicao.id,
+      horario_id: horario.id,
+      sala_id: (await db('sala').where({ nome: 'Sala 1' }).first('id')).id,
+    })
+    const turmas = (linhaINF1M) =>
+      arquivos(['turmas.csv'], {
+        'turmas.csv': CSV['turmas.csv'].replace(
+          'INF1M;Técnico em Informática;Integrado;M;35',
+          linhaINF1M
+        ),
+      })
+
+    // M → M, V: a aula da manhã continua valendo.
+    const acrescenta = turmas('INF1M;Técnico em Informática;Integrado;"M, V";35')
+    const p1 = await previa(periodo.periodoId, acrescenta)
+    expect(p1.arquivos[0].linhas[0]).toMatchObject({ situacao: 'atualizar' })
+    expect(p1.arquivos[0].linhas[0].aulasParaRevisar).toBeUndefined()
+    expect(p1.impacto).toEqual({ aulas: 0, versoes: 0 })
+    await confirmar(periodo.periodoId, acrescenta)
+    expect((await db('aula').where({ versao_id: versaoId }).first()).revisar).toBe(0)
+
+    // M, V → V: a aula da manhã fica fora do turno.
+    const retira = turmas('INF1M;Técnico em Informática;Integrado;V;35')
+    const p2 = await previa(periodo.periodoId, retira)
+    expect(p2.arquivos[0].linhas[0]).toMatchObject({ aulasParaRevisar: 1 })
+    await confirmar(periodo.periodoId, retira)
+    expect((await db('aula').where({ versao_id: versaoId }).first()).revisar).toBe(1)
+  })
+
   describe('rotas HTTP', () => {
     const app = criarApp()
 

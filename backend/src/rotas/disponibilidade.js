@@ -1,5 +1,6 @@
 // F5-07 e F5-08 — Disponibilidade por período e por horário.
 //   GET  /api/periodos/:periodoId/disponibilidade/professores?versao=ID        resumo
+//   GET  /api/periodos/:periodoId/disponibilidade/turmas?versao=ID             tempos fechados de cada turma
 //   GET  /api/periodos/:periodoId/disponibilidade/:tipo/:recursoId?versao=ID
 //   PUT  /api/periodos/:periodoId/disponibilidade/:tipo/:recursoId?versao=ID   { itens: [...] }
 //   POST /api/periodos/:periodoId/disponibilidade/:tipo/:recursoId/usar-padrao?versao=ID
@@ -10,6 +11,7 @@ import { Router } from 'express'
 import { z } from 'zod'
 import { validar } from '../middlewares/validar.js'
 import { exigirEditorDoHorario, exigirLogin } from '../middlewares/autenticacao.js'
+import { ErroProibido } from '../erros.js'
 import * as servico from '../servicos/disponibilidade.js'
 
 const rotas = Router({ mergeParams: true })
@@ -40,6 +42,13 @@ rotas.get('/professores', validar({ params: Periodo, query: Escopo }), async (re
   res.json(
     await servico.resumoProfessores(req.params.periodoId, req.session.usuario, versaoDa(req))
   )
+})
+
+// Tempos fechados de todas as turmas (para o editor e a visualização da grade).
+rotas.get('/turmas', validar({ params: Periodo, query: Escopo }), async (req, res) => {
+  if (req.session.usuario.perfil !== 'gestor')
+    throw new ErroProibido('A disponibilidade das turmas é consultada pelo gestor')
+  res.json(await servico.indisponiveisDasTurmas(req.params.periodoId, versaoDa(req)))
 })
 
 rotas.get('/:tipo/:recursoId', validar({ params: Recurso, query: Escopo }), async (req, res) => {
