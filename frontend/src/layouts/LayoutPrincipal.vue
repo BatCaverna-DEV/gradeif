@@ -1,10 +1,15 @@
 <template>
-  <div class="layout" :class="{ 'menu-aberto': menuAberto }">
+  <div class="layout" :class="{ 'menu-aberto': menuAberto, 'menu-recolhido': menuRecolhido }">
     <!-- Menu lateral: fixo no computador; no celular, desliza da esquerda. -->
     <aside id="menu-principal" class="lateral" aria-label="Menu principal">
       <div class="lateral-topo">
         <RouterLink :to="{ name: 'painel' }" class="marca" @click="menuAberto = false">
-          <img :src="logo" alt="GradeIF — Sistema de Geração de Horário Escolar" />
+          <img
+            class="marca-logo"
+            :src="logo"
+            alt="GradeIF — Sistema de Geração de Horário Escolar"
+          />
+          <img class="marca-icone" :src="icone" alt="GradeIF" />
         </RouterLink>
         <button
           type="button"
@@ -26,6 +31,7 @@
             class="menu-item"
             :class="{ ativo: ativo(item) }"
             :aria-current="ativo(item) ? 'page' : undefined"
+            :title="menuRecolhido ? item.rotulo : undefined"
             @click="menuAberto = false"
           >
             <i :class="`bi bi-${item.icone}`" aria-hidden="true" />
@@ -34,9 +40,9 @@
         </section>
       </nav>
 
-      <div class="lateral-rodape">
+      <div class="lateral-rodape" title="IFMA Campus Coelho Neto">
         <i class="bi bi-building" aria-hidden="true" />
-        IFMA Campus Coelho Neto
+        <span>IFMA Campus Coelho Neto</span>
       </div>
     </aside>
     <div class="cortina" aria-hidden="true" @click="menuAberto = false" />
@@ -56,6 +62,20 @@
         <RouterLink :to="{ name: 'painel' }" class="d-lg-none marca-mini" aria-label="Início">
           <img :src="icone" alt="" />
         </RouterLink>
+        <!-- Modo foco: recolhe o menu lateral (só no computador). -->
+        <button
+          type="button"
+          class="btn-icone d-none d-lg-inline-flex"
+          :aria-label="menuRecolhido ? 'Mostrar o menu completo' : 'Recolher o menu (modo foco)'"
+          :title="
+            menuRecolhido ? 'Mostrar o menu completo' : 'Recolher o menu para ganhar espaço (F)'
+          "
+          aria-controls="menu-principal"
+          :aria-pressed="menuRecolhido"
+          @click="alternarMenu"
+        >
+          <i :class="menuRecolhido ? 'bi bi-layout-sidebar' : 'bi bi-layout-sidebar-inset'" />
+        </button>
 
         <nav class="trilha d-none d-md-flex" aria-label="Você está em">
           <RouterLink :to="{ name: 'painel' }" aria-label="Início"
@@ -183,6 +203,7 @@ import {
 import { http, mensagemDeErro } from '@/api/http'
 import { useAuthStore } from '@/stores/auth'
 import { usePeriodoStore } from '@/stores/periodo'
+import { menuRecolhido } from '@/utils/preferencias'
 import logo from '@/assets/logo-gradeif.webp'
 import icone from '@/assets/icone-gradeif.png'
 
@@ -191,6 +212,7 @@ const periodoStore = usePeriodoStore()
 const rota = useRoute()
 const router = useRouter()
 const menuAberto = ref(false)
+const alternarMenu = () => (menuRecolhido.value = !menuRecolhido.value)
 
 // Menu na ordem do ciclo de um período letivo (descrição, seção 2).
 // "tambem": telas internas que acendem o mesmo item.
@@ -362,6 +384,11 @@ async function sair() {
   width: 100%;
   max-width: 205px;
   height: auto;
+}
+.marca .marca-icone {
+  display: none;
+  width: 38px;
+  height: 38px;
 }
 .menu {
   flex: 1;
@@ -570,6 +597,51 @@ async function sair() {
 }
 .cortina {
   display: none;
+}
+
+/* ---------- Modo foco: menu recolhido (só no computador) ---------- */
+@media (min-width: 992px) {
+  .layout.menu-recolhido {
+    --largura-menu: 68px;
+  }
+  .menu-recolhido .lateral-topo {
+    justify-content: center;
+    padding: 0.9rem 0.5rem;
+  }
+  .menu-recolhido .marca .marca-logo {
+    display: none;
+  }
+  .menu-recolhido .marca .marca-icone {
+    display: block;
+  }
+  .menu-recolhido .menu {
+    padding: 0.25rem 0.5rem 1rem;
+  }
+  .menu-recolhido .menu-titulo {
+    height: 1px;
+    margin: 0.35rem 0.4rem 0.5rem;
+    overflow: hidden;
+    color: transparent;
+    background: var(--gf-borda);
+  }
+  .menu-recolhido .menu-grupo + .menu-grupo {
+    margin-top: 0.4rem;
+  }
+  .menu-recolhido .menu-item {
+    justify-content: center;
+    padding: 0.6rem 0;
+  }
+  .menu-recolhido .menu-item span,
+  .menu-recolhido .lateral-rodape span {
+    display: none;
+  }
+  .menu-recolhido .lateral-rodape {
+    padding: 0.85rem 0;
+    text-align: center;
+  }
+  .menu-recolhido .lateral-rodape i {
+    margin: 0;
+  }
 }
 
 /* ---------- Celular e tablet ---------- */

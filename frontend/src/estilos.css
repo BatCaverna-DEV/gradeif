@@ -14,6 +14,8 @@
   --gf-fundo: #f2f5f3;
   --gf-superficie: #ffffff;
   --gf-borda: #e1e8e3;
+  /* Bordas das células das grades de horário (mais fortes que --gf-borda). */
+  --gf-borda-grade: #c3cec6;
   --gf-texto: #1b2a21;
   --gf-texto-suave: #5d6d63;
   --gf-sombra: 0 1px 2px rgba(12, 46, 26, 0.05), 0 6px 18px rgba(12, 46, 26, 0.06);

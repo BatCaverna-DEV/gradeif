@@ -28,3 +28,19 @@ export const formatarNumero = (n) => (n == null ? '' : Number(n).toLocaleString(
 
 // Custo do solver = rígidas × 1000 + flexíveis (backend/src/core/avaliador.js).
 export const PESO_RIGIDA = 1000
+
+// Nome abreviado para os cartões compactos da grade: primeiro e último nome
+// ("Monieli de Araújo Santana" → "Monieli Santana"). Com Júnior, Filho, Neto ou
+// Sobrinho no fim, entra também o sobrenome anterior.
+const SUFIXOS = new Set(['junior', 'júnior', 'jr', 'jr.', 'filho', 'neto', 'sobrinho'])
+export function nomeCurto(nome) {
+  const partes = String(nome ?? '')
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean)
+  if (partes.length <= 2) return partes.join(' ')
+  const ultimo = partes.at(-1)
+  return SUFIXOS.has(ultimo.toLowerCase())
+    ? `${partes[0]} ${partes.at(-2)} ${ultimo}`
+    : `${partes[0]} ${ultimo}`
+}

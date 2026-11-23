@@ -31,6 +31,37 @@
       </template>
     </div>
 
+    <!-- Selo: uma linha no cabeçalho do editor e da tela do horário -->
+    <span
+      v-else-if="selo"
+      class="selo-editor"
+      :class="souEditor ? 'selo-meu' : versao.editor ? 'selo-leitura' : 'selo-livre'"
+    >
+      <template v-if="souEditor">
+        <i class="bi bi-pencil-square" aria-hidden="true" />
+        <span title="Você é o editor deste horário. Os outros gestores só visualizam."
+          >Você edita</span
+        >
+        <BButton size="sm" variant="link" class="p-0" @click="abrirTransferencia"
+          >transferir</BButton
+        >
+      </template>
+      <template v-else-if="versao.editor">
+        <i class="bi bi-lock" aria-hidden="true" />
+        <span
+          :title="`${versao.editor.nome} está editando este horário. Para alterar, peça que transfira a edição para você ou duplique o horário.`"
+          >Somente leitura · {{ versao.editor.nome }} edita</span
+        >
+      </template>
+      <template v-else>
+        <i class="bi bi-unlock" aria-hidden="true" />
+        <span>Sem editor</span>
+        <BButton size="sm" variant="link" class="p-0" :disabled="enviando" @click="assumir"
+          >assumir</BButton
+        >
+      </template>
+    </span>
+
     <!-- Faixa: no topo das telas do horário -->
     <BAlert
       v-else
@@ -120,6 +151,8 @@ import { usePeriodoStore } from '@/stores/periodo'
 const props = defineProps({
   versao: { type: Object, default: null },
   compacto: { type: Boolean, default: false },
+  // Selo de uma linha (cabeçalho compacto do editor e da tela do horário).
+  selo: { type: Boolean, default: false },
 })
 const emit = defineEmits(['atualizado'])
 
@@ -179,3 +212,30 @@ async function assumir() {
   }
 }
 </script>
+
+<style scoped>
+.selo-editor {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.15rem 0.6rem;
+  border-radius: 999px;
+  border: 1px solid var(--gf-borda);
+  font-size: 0.8rem;
+  white-space: nowrap;
+}
+.selo-editor .btn-link {
+  font-size: 0.8rem;
+}
+.selo-meu {
+  background: var(--gf-verde-suave);
+  color: var(--gf-verde-escuro);
+}
+.selo-leitura {
+  background: var(--bs-warning-bg-subtle);
+  color: var(--bs-warning-text-emphasis);
+}
+.selo-livre {
+  background: var(--bs-tertiary-bg);
+}
+</style>
