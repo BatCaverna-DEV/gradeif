@@ -250,17 +250,21 @@ const disciplinas = {
 
 // ---------- Salas ----------
 
+const esquemaSala = z.object({
+  nome: texto(60),
+  tipo: z
+    .string()
+    .max(40)
+    .nullish()
+    .transform((v) => tipoAmbiente(v)),
+  capacidade: inteiro(1, 1000, 'A capacidade deve ser maior que zero'),
+  ativa: z.boolean(),
+})
+
 const salas = {
-  esquema: z.object({
-    nome: texto(60),
-    tipo: z
-      .string()
-      .max(40)
-      .nullish()
-      .transform((v) => tipoAmbiente(v)),
-    capacidade: inteiro(1, 1000, 'A capacidade deve ser maior que zero'),
-    ativa: z.boolean(),
-  }),
+  esquema: esquemaSala,
+  // No cadastro, a sala nova começa ativa se o formulário não disser o contrário.
+  esquemaCriacao: esquemaSala.extend({ ativa: z.boolean().default(true) }),
 
   async listar(_periodoId, id) {
     const consulta = db('sala').orderBy('nome').select('id', 'nome', 'tipo', 'capacidade', 'ativa')
@@ -268,9 +272,15 @@ const salas = {
     return (await consulta).map((s) => ({ ...s, ativa: !!s.ativa }))
   },
 
+  async criar(trx, d) {
+    await salaUnica(trx, d)
+    const [id] = await trx('sala').insert(d)
+    return id
+  },
+
   async atualizar(trx, id, d) {
     const antes = await exigir(trx, 'sala', { id }, 'Sala não encontrada')
-    await garantirUnico(trx, 'sala', { nome: d.nome }, id, `Já existe sala chamada ${d.nome}`)
+    await salaUnica(trx, d, id)
     await trx('sala').where({ id }).update(d)
     const mudou = alterados({ ...antes, ativa: !!antes.ativa }, d)
     const aulasMarcadas = mudancaAfetaGrade('salas', mudou)
@@ -561,6 +571,18 @@ const atribuicoes = {
   },
 }
 
+// Nome único (sem diferenciar acento e maiúscula): a planilha reconhece a sala pelo nome.
+async function salaUnica(trx, d, idAtual = null) {
+  const outra = (await trx('sala').select('id', 'nome')).find(
+    (x) => x.id !== idAtual && chave(x.nome) === chave(d.nome)
+  )
+  if (outra) {
+    throw new ErroConflito(`Já existe a sala ${outra.nome}`, [
+      { campo: 'nome', mensagem: 'Já existe sala com este nome' },
+    ])
+  }
+}
+
 // Sigla e nome únicos (sem diferenciar acento e maiúscula): a planilha de oferta
 // reconhece a disciplina pelo nome.
 async function disciplinaUnica(trx, d, idAtual = null) {
@@ -660,7 +682,7 @@ export async function atualizar(entidade, periodoId, id, corpo) {
   return { registro, ...resultado }
 }
 
-// Cadastro manual: só os tipos que têm "criar" (professores, disciplinas e turmas).
+// Cadastro manual: só os tipos que têm "criar" (professores, disciplinas, salas e turmas).
 export async function criar(entidade, periodoId, corpo) {
   await exigirPeriodo(periodoId)
   const def = ENTIDADES[entidade]

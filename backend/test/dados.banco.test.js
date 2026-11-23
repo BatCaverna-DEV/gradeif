@@ -364,6 +364,55 @@ describe.skipIf(!banco)('dados (F1-21)', () => {
     })
   })
 
+  describe('cadastro de sala', () => {
+    const url = () => `${base}/salas`
+
+    it('cadastra sala ativa, com tipo normalizado, e ela aparece na lista', async () => {
+      const { body } = await agente
+        .post(url())
+        .send({ nome: 'Lab. Redes', tipo: 'Laboratório de Informática', capacidade: 30 })
+        .expect(201)
+      expect(body.registro).toMatchObject({
+        nome: 'Lab. Redes',
+        tipo: 'laboratorio de informatica',
+        capacidade: 30,
+        ativa: true,
+      })
+      const inativa = (
+        await agente
+          .post(url())
+          .send({ nome: 'Auditório', tipo: '', capacidade: 120, ativa: false })
+          .expect(201)
+      ).body.registro
+      expect(inativa).toMatchObject({ tipo: 'sala', ativa: false })
+      const lista = (await agente.get(url())).body
+      expect(lista.map((s) => s.nome)).toEqual([
+        'Auditório',
+        'Lab. Informática',
+        'Lab. Redes',
+        'Sala 1',
+      ])
+    })
+
+    it('recusa nome repetido (sem diferenciar acento e maiúscula) e dados inválidos', async () => {
+      const repetida = await agente
+        .post(url())
+        .send({ nome: 'lab. informatica', tipo: 'sala', capacidade: 20 })
+        .expect(409)
+      expect(repetida.body.detalhes).toEqual([
+        { campo: 'nome', mensagem: 'Já existe sala com este nome' },
+      ])
+      await agente.post(url()).send({ nome: '', tipo: 'sala', capacidade: 20 }).expect(400)
+      await agente.post(url()).send({ nome: 'Sala 9', tipo: 'sala', capacidade: 0 }).expect(400)
+      // Renomear para o nome de outra também é recusado.
+      const sala1 = await id('sala', { nome: 'Sala 1' })
+      await agente
+        .put(`${url()}/${sala1}`)
+        .send({ nome: 'LAB. INFORMÁTICA', tipo: 'sala', capacidade: 40, ativa: true })
+        .expect(409)
+    })
+  })
+
   describe('cadastro de turma', () => {
     it('cadastra turma no semestre, com curso novo, e recusa código repetido', async () => {
       const corpo = {

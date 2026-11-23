@@ -47,6 +47,11 @@
               :campos-busca="e.busca"
               :carregando="estado[e.chave].carregando"
               :placeholder="e.placeholder"
+              :texto-vazio="
+                e.novo
+                  ? `Nenhum registro. Use o botão ${e.novo.rotulo} ou a importação de planilhas.`
+                  : undefined
+              "
               @editar="abrirEdicao(e, $event)"
               @excluir="pedirExclusao(e, $event)"
             >
@@ -140,7 +145,9 @@
               ? 'O cadastro vale para todos os períodos. SIAPE e e-mail são opcionais; o nome não pode repetir o de outro professor.'
               : edicao.entidade?.chave === 'disciplinas'
                 ? 'A disciplina vale para todos os períodos. Sem sigla, ela é gerada pelas iniciais do nome; sigla e nome não podem repetir.'
-                : 'Esta correção vale para todos os períodos.'
+                : edicao.entidade?.chave === 'salas'
+                  ? 'A sala vale para todos os períodos. O nome não pode repetir o de outra sala, e o tipo deve coincidir com o tipo de ambiente das disciplinas que vão usá-la.'
+                  : 'Esta correção vale para todos os períodos.'
         }}
       </BAlert>
       <FormularioRegistro
@@ -155,9 +162,7 @@
         <template #sem-opcoes="{ campo }">
           <template v-if="campo === 'turnos'">
             O período {{ periodo?.nome }} ainda não tem turnos. Cadastre-os em
-            <RouterLink
-              v-if="periodo"
-              :to="{ name: 'grade-horaria', params: { id: periodo.id } }"
+            <RouterLink v-if="periodo" :to="{ name: 'grade-horaria', params: { id: periodo.id } }"
               >Turnos e tempos de aula</RouterLink
             >
             e depois volte para cadastrar a turma.
@@ -314,7 +319,8 @@ async function abrirEdicao(entidade, item) {
   })
 }
 
-// Cadastro manual (só professores): o mesmo formulário, sem registro de origem.
+// Cadastro manual (professores, turmas, disciplinas e salas): o mesmo formulário,
+// sem registro de origem.
 function abrirCriacao(entidade) {
   sucesso.value = ''
   Object.assign(edicao, {
@@ -355,7 +361,9 @@ async function salvar() {
           ? `Cadastrada a ${entidade.rotulo(r.registro)} no período ${periodo.value.nome}. Inclua as disciplinas dela nas atribuições de cada horário.`
           : entidade.chave === 'disciplinas'
             ? `Cadastrada a disciplina ${entidade.rotulo(r.registro)}. Ela já pode ser escolhida nas atribuições dos horários.`
-            : `Cadastrado: ${entidade.rotulo(r.registro)}. Ele já pode ser escolhido nas atribuições.`
+            : entidade.chave === 'salas'
+              ? `Cadastrada a ${entidade.rotulo(r.registro)}. Ela já pode ser escolhida no editor de grade e entra nas próximas gerações.`
+              : `Cadastrado: ${entidade.rotulo(r.registro)}. Ele já pode ser escolhido nas atribuições.`
       return
     }
     const r = await http.put(`${base.value}/${entidade.chave}/${id}`, corpoDaEdicao())
