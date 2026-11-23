@@ -27,17 +27,34 @@
         campus; ajuste o que precisar e clique em <strong>Salvar grade horária</strong>.
       </BAlert>
 
+      <BAlert :model-value="soAcrescentar" variant="info">
+        Este período já tem horários, e as aulas deles usam os tempos abaixo. Por isso os dias
+        letivos e os turnos existentes não podem mudar, mas você pode
+        <strong>acrescentar turnos</strong>. Um turno novo pode ter tempos de outro tamanho no mesmo
+        período do dia (por exemplo, o superior com aulas de 1 hora à noite): aulas em tempos que se
+        cruzam contam como choque de professor, turma e sala.
+      </BAlert>
+
       <BCard class="mb-3">
         <h2 class="h6">Dias letivos</h2>
-        <BFormCheckboxGroup v-model="dias" :options="opcoesDias" />
+        <BFormCheckboxGroup v-model="dias" :options="opcoesDias" :disabled="soAcrescentar" />
       </BCard>
 
       <BCard v-for="(turno, i) in turnos" :key="i" class="mb-3">
         <div class="d-flex flex-wrap gap-2 align-items-end mb-3">
           <BFormGroup label="Turno" :label-for="`turno-${i}`" class="flex-grow-1 mb-0">
-            <BFormInput :id="`turno-${i}`" v-model="turno.nome" placeholder="Matutino" />
+            <BFormInput
+              :id="`turno-${i}`"
+              v-model="turno.nome"
+              placeholder="Matutino"
+              :disabled="travado(turno)"
+            />
           </BFormGroup>
-          <BButton variant="outline-danger" size="sm" @click="turnos.splice(i, 1)"
+          <BButton
+            v-if="!travado(turno)"
+            variant="outline-danger"
+            size="sm"
+            @click="turnos.splice(i, 1)"
             >Remover turno</BButton
           >
         </div>
@@ -59,6 +76,7 @@
                   v-model="tempo.horaInicio"
                   type="time"
                   size="sm"
+                  :disabled="travado(turno)"
                   :aria-label="`Início do ${j + 1}º tempo`"
               /></BTd>
               <BTd
@@ -66,10 +84,12 @@
                   v-model="tempo.horaFim"
                   type="time"
                   size="sm"
+                  :disabled="travado(turno)"
                   :aria-label="`Fim do ${j + 1}º tempo`"
               /></BTd>
               <BTd class="text-end">
                 <BButton
+                  v-if="!travado(turno)"
                   variant="link"
                   size="sm"
                   class="text-danger"
@@ -80,7 +100,11 @@
             </BTr>
           </BTbody>
         </BTableSimple>
-        <BButton variant="outline-secondary" size="sm" @click="adicionarTempo(turno)"
+        <BButton
+          v-if="!travado(turno)"
+          variant="outline-secondary"
+          size="sm"
+          @click="adicionarTempo(turno)"
           >Adicionar tempo</BButton
         >
       </BCard>
@@ -137,6 +161,9 @@ const salvando = ref(false)
 const erro = ref('')
 const sucesso = ref('')
 const novaGrade = ref(false)
+// Com horários criados, só turnos novos podem ser editados.
+const soAcrescentar = ref(false)
+const travado = (turno) => soAcrescentar.value && turno.salvo
 
 function somarMinutos(hora, minutos) {
   const [h, m] = hora.split(':').map(Number)
@@ -144,10 +171,23 @@ function somarMinutos(hora, minutos) {
   return `${String(Math.floor(total / 60) % 24).padStart(2, '0')}:${String(total % 60).padStart(2, '0')}`
 }
 
+const minutosDe = (hora) => {
+  const [h, m] = hora.split(':').map(Number)
+  return h * 60 + m
+}
+
+// O tempo novo começa no fim do anterior e tem o mesmo tamanho dele (50 min no primeiro).
 function adicionarTempo(turno) {
   const ultimo = turno.tempos.at(-1)
   const inicio = ultimo?.horaFim ?? '07:00'
-  turno.tempos.push({ horaInicio: inicio, horaFim: somarMinutos(inicio, 50) })
+  const duracao =
+    ultimo?.horaInicio && ultimo?.horaFim
+      ? minutosDe(ultimo.horaFim) - minutosDe(ultimo.horaInicio)
+      : 0
+  turno.tempos.push({
+    horaInicio: inicio,
+    horaFim: somarMinutos(inicio, duracao > 0 ? duracao : 50),
+  })
 }
 
 function adicionarTurno() {
@@ -205,10 +245,12 @@ async function carregar() {
     if (!periodoStore.periodos.length) await periodoStore.carregar()
     const grade = await http.get(`/periodos/${props.id}/grade-horaria`)
     novaGrade.value = !grade.turnos.length
+    soAcrescentar.value = !!grade.soAcrescentar
     if (grade.turnos.length) {
       dias.value = grade.dias
       turnos.value = grade.turnos.map((t) => ({
         nome: t.nome,
+        salvo: true,
         tempos: t.tempos.map((x) => ({ ...x })),
       }))
     } else {
@@ -233,6 +275,7 @@ async function salvar() {
     }
     const grade = await http.put(`/periodos/${props.id}/grade-horaria`, corpo)
     novaGrade.value = false
+    for (const t of turnos.value) t.salvo = true
     sucesso.value = `Grade horária salva: ${grade.horarios.length} tempos de aula na semana.`
   } catch (e) {
     erro.value = mensagemDeErro(e)

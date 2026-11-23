@@ -61,13 +61,69 @@ function montarConfig(restricoes) {
   return config
 }
 
-// Turnos de noite e de manhã para a F3: pelos parâmetros ou pelo nome.
-function turnosDaInterjornada(turnos, parametros) {
+// "07:00" ou "07:00:00" → minutos desde a meia-noite; sem hora, null.
+function minutos(hora) {
+  const m = /^(\d{1,2}):(\d{2})/.exec(hora ?? '')
+  return m ? Number(m[1]) * 60 + Number(m[2]) : null
+}
+
+// Tempos que acontecem ao mesmo tempo no relógio. Turnos diferentes podem ter
+// tempos de tamanhos diferentes no mesmo período do dia (Noturno com aulas de
+// 45 min e Superior Noturno com aulas de 1 h, por exemplo): uma aula num deles
+// ocupa o professor, a turma e a sala também nos tempos do outro que se cruzam.
+// sobre[h] = índices dos outros horários do mesmo dia que se cruzam com h.
+// Horários sem hora informada não se cruzam com nenhum.
+const NENHUM = Object.freeze([])
+function temposSobrepostos(horarios) {
+  const H = horarios.length
+  const sobre = new Array(H).fill(NENHUM)
+  const inicio = horarios.map((h) => minutos(h.horaInicio))
+  const fim = horarios.map((h) => minutos(h.horaFim))
+  // Os horários estão ordenados por dia: compara só dentro de cada dia.
+  let comeco = 0
+  for (let i = 0; i <= H; i++) {
+    if (i < H && horarios[i].diaSemana === horarios[comeco].diaSemana) continue
+    for (let x = comeco; x < i; x++) {
+      if (inicio[x] == null || fim[x] == null) continue
+      for (let y = x + 1; y < i; y++) {
+        if (inicio[y] == null || fim[y] == null) continue
+        if (inicio[x] < fim[y] && inicio[y] < fim[x]) {
+          if (sobre[x] === NENHUM) sobre[x] = []
+          if (sobre[y] === NENHUM) sobre[y] = []
+          sobre[x].push(y)
+          sobre[y].push(x)
+        }
+      }
+    }
+    comeco = i
+  }
+  return sobre
+}
+
+// Turnos de noite e de manhã para a F3: pelos parâmetros ou pelo nome. Turnos
+// que se cruzam no relógio com eles (Superior Noturno junto do Noturno, por
+// exemplo) contam como noite ou manhã também.
+function turnosDaInterjornada(turnos, horarios, horTurno, sobre, parametros) {
   const porId = (id) => turnos.findIndex((t) => t.id === id)
   const porNome = (re) => turnos.findIndex((t) => re.test(normalizarTipo(t.nome)))
   const noite = parametros.turnoNoite ? porId(parametros.turnoNoite) : porNome(/not|noite/)
   const manha = parametros.turnoManha ? porId(parametros.turnoManha) : porNome(/mat|manha/)
-  return noite >= 0 && manha >= 0 && noite !== manha ? { noite, manha } : null
+  if (noite < 0 || manha < 0 || noite === manha) return null
+  const marcar = (base) => {
+    const flags = new Uint8Array(turnos.length)
+    flags[base] = 1
+    horarios.forEach((_h, i) => {
+      if (horTurno[i] !== base) return
+      for (const j of sobre[i]) flags[horTurno[j]] = 1
+    })
+    return flags
+  }
+  const noites = marcar(noite)
+  const manhas = marcar(manha)
+  // Um turno que cruza os dois (improvável) fica só no seu próprio papel.
+  manhas[noite] = 0
+  noites[manha] = 0
+  return { noite, manha, noites, manhas }
 }
 
 export function criarInstancia(entrada) {
@@ -116,6 +172,7 @@ export function criarInstancia(entrada) {
     }
   })
   const dias = [...new Set(horarios.map((h) => h.diaSemana))]
+  const sobre = temposSobrepostos(horarios)
 
   // ---------- Recursos ----------
   const idxTurma = indexar(p.turmas, 'Turma', erros)
@@ -219,6 +276,25 @@ export function criarInstancia(entrada) {
     const atual = indisp[i.tipoRecurso][r * H + h]
     indisp[i.tipoRecurso][r * H + h] = i.rigida ? INDISPONIVEL : atual || PREFERE_EVITAR
   }
+  // Professor e sala indisponíveis num tempo também estão nos tempos de outros
+  // turnos que se cruzam com ele. (A da turma diz quais tempos do turno dela
+  // estão abertos; não passa para outros turnos.)
+  for (const [tipo, n] of [
+    ['professor', P],
+    ['sala', S],
+  ]) {
+    const original = indisp[tipo].slice()
+    for (let r = 0; r < n; r++)
+      for (let h = 0; h < H; h++) {
+        const v = original[r * H + h]
+        if (!v) continue
+        for (const h2 of sobre[h]) {
+          const k = r * H + h2
+          if (v === INDISPONIVEL) indisp[tipo][k] = INDISPONIVEL
+          else if (!indisp[tipo][k]) indisp[tipo][k] = PREFERE_EVITAR
+        }
+      }
+  }
 
   // ---------- Aulas fixadas ----------
   const fixadas = []
@@ -276,7 +352,9 @@ export function criarInstancia(entrada) {
     indisp,
     fixadas,
     fixadasPorAtr,
-    interjornada: turnosDaInterjornada(turnos, config.F3.parametros),
+    sobre,
+    temSobreposicao: sobre.some((s) => s.length > 0),
+    interjornada: turnosDaInterjornada(turnos, horarios, horTurno, sobre, config.F3.parametros),
     idx: {
       horario: idxHorario,
       turma: idxTurma,

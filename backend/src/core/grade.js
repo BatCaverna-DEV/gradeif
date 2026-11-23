@@ -99,32 +99,56 @@ export class Grade {
     if (h >= 0) this.colocar(i, h, s)
   }
 
-  // ---------- Consultas em tempo constante ----------
+  // ---------- Consultas ----------
+  // Aulas que ocupam o recurso durante o horário h: as do próprio horário e as dos
+  // horários de outros turnos que se cruzam com ele no relógio (inst.sobre[h]).
+  // Sem sobreposição, é a própria célula, em tempo constante.
+  ocupacao(celulas, r, h) {
+    const base = r * this.H
+    const propria = celulas[base + h]
+    const outros = this.inst.sobre[h]
+    if (!outros.length) return propria ?? []
+    const todas = propria ? [...propria] : []
+    for (const h2 of outros) {
+      const cel = celulas[base + h2]
+      if (cel?.length) todas.push(...cel)
+    }
+    return todas
+  }
+
+  livre(celulas, r, h) {
+    const base = r * this.H
+    if (celulas[base + h]?.length) return false
+    for (const h2 of this.inst.sobre[h]) if (celulas[base + h2]?.length) return false
+    return true
+  }
+
   aulasDoProfessor(p, h) {
-    return this.celProfessor[p * this.H + h] ?? []
+    return this.ocupacao(this.celProfessor, p, h)
   }
 
   aulasDaTurma(t, h) {
-    return this.celTurma[t * this.H + h] ?? []
+    return this.ocupacao(this.celTurma, t, h)
   }
 
   aulasDaSala(s, h) {
-    return this.celSala[s * this.H + h] ?? []
+    return this.ocupacao(this.celSala, s, h)
   }
 
   professorLivre(p, h) {
-    return !this.celProfessor[p * this.H + h]?.length
+    return this.livre(this.celProfessor, p, h)
   }
 
   salaLivre(s, h) {
-    return !this.celSala[s * this.H + h]?.length
+    return this.livre(this.celSala, s, h)
   }
 
   // A turma aceita mais uma aula da atribuição a no horário h? Só se estiver vazia
-  // ou se todas as aulas ali forem de outras atribuições do mesmo grupo paralelo.
+  // ou se todas as aulas ali (e nos tempos que se cruzam) forem de outras
+  // atribuições do mesmo grupo paralelo.
   turmaAceita(a, h) {
-    const cel = this.celTurma[this.inst.atrTurma[a] * this.H + h]
-    if (!cel?.length) return true
+    const cel = this.aulasDaTurma(this.inst.atrTurma[a], h)
+    if (!cel.length) return true
     const g = this.inst.atrGrupo[a]
     if (g < 0) return false
     return cel.every((i) => this.atr[i] !== a && this.inst.atrGrupo[this.atr[i]] === g)
