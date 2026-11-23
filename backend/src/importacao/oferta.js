@@ -13,7 +13,7 @@
 import { chave, normalizar } from './texto.js'
 import { SITUACAO } from './classificacao.js'
 import { chaveCurso } from './contexto.js'
-import { buscarAulasAfetadas } from './impacto.js'
+import { aulasAfetadasPelaTurma, buscarAulasAfetadas } from './impacto.js'
 import { nivelDeEnsino } from './planilhas.js'
 
 // ---------- Regras de inferência ----------
@@ -492,10 +492,12 @@ export async function classificarOferta(trx, periodoId, arquivo, ctx, validarLin
   return { linhas, avisos: avisosArquivo }
 }
 
-// Aulas já alocadas afetadas pela oferta: atribuições alteradas e turmas com turno novo.
+// Aulas já alocadas afetadas pela oferta: as de atribuições alteradas e, nas turmas
+// com turno ou número de alunos diferente, só as que a mudança deixa fora do lugar
+// (turno retirado, sala que deixou de comportar a turma).
 export async function impactoDaOferta(trx, periodoId, arquivo) {
   const atribuicoes = []
-  const turmas = []
+  const turmas = new Map() // id → objeto da turma (compartilhado entre as linhas)
   for (const l of arquivo.linhas) {
     if (l.situacao !== SITUACAO.ATUALIZAR) continue
     const campos = l.mudancas.map((m) => m.chaveCampo)
@@ -505,9 +507,21 @@ export async function impactoDaOferta(trx, periodoId, arquivo) {
     )
       atribuicoes.push(l.registro.atribuicao.id)
     if (l.registro.turma.id && campos.some((c) => c === 'turnos' || c === 'numeroAlunos'))
-      turmas.push(l.registro.turma.id)
+      turmas.set(l.registro.turma.id, l.registro.turma)
   }
-  const aulas = await buscarAulasAfetadas(trx, { periodoId, atribuicoes, turmas })
+  const aulas = await buscarAulasAfetadas(trx, { periodoId, atribuicoes })
+  for (const [turmaId, turma] of turmas) {
+    const afetadas = await aulasAfetadasPelaTurma(trx, {
+      periodoId,
+      turmaId,
+      antes: { turnos: turma.turnos, numeroAlunos: turma.numeroAlunos },
+      depois: {
+        turnos: turma.novosTurnos ?? turma.turnos,
+        numeroAlunos: turma.novosAlunos ?? turma.numeroAlunos,
+      },
+    })
+    for (const a of afetadas) if (!aulas.some((x) => x.id === a.id)) aulas.push(a)
+  }
   for (const l of arquivo.linhas) {
     if (l.situacao !== SITUACAO.ATUALIZAR) continue
     const n = aulas.filter(

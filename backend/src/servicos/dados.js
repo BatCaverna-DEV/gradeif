@@ -8,7 +8,12 @@ import { z } from 'zod'
 import { db } from '../db/knex.js'
 import { ErroConflito, ErroNaoEncontrado, ErroValidacao } from '../erros.js'
 import { chave, tipoAmbiente } from '../importacao/texto.js'
-import { marcarParaRevisao, mudancaAfetaGrade } from '../importacao/impacto.js'
+import {
+  aulasAfetadasPelaTurma,
+  marcarAulas,
+  marcarParaRevisao,
+  mudancaAfetaGrade,
+} from '../importacao/impacto.js'
 import { siglaDe } from '../importacao/oferta.js'
 import { corDoProfessor, FORMATO_COR } from '../core/cores.js'
 
@@ -404,19 +409,31 @@ const turmas = {
       })
 
     const cursoAntes = await trx('curso').where({ id: antes.curso_id }).first()
+    const turnosAntes = [...(json(antes.turnos_permitidos) ?? [])].sort((a, b) => a - b)
     const mudou = alterados(
       {
         codigo: antes.codigo,
         curso: cursoAntes?.nome,
         nivel: cursoAntes?.nivel,
-        turnos: [...(json(antes.turnos_permitidos) ?? [])].sort((a, b) => a - b),
+        turnos: turnosAntes,
         numeroAlunos: antes.numero_alunos,
       },
       d
     )
-    const aulasMarcadas = mudancaAfetaGrade('turmas', mudou)
-      ? await marcarParaRevisao(trx, { periodoId, turmas: [id] })
-      : 0
+    // Só as aulas que a mudança deixa fora do lugar: num turno retirado ou numa sala
+    // que deixou de comportar a turma. Acrescentar turno não marca nada.
+    const afetadas = mudancaAfetaGrade('turmas', mudou)
+      ? await aulasAfetadasPelaTurma(trx, {
+          periodoId,
+          turmaId: id,
+          antes: { turnos: turnosAntes, numeroAlunos: antes.numero_alunos },
+          depois: d,
+        })
+      : []
+    const aulasMarcadas = await marcarAulas(
+      trx,
+      afetadas.map((a) => a.id)
+    )
     return { alterados: mudou, aulasMarcadas }
   },
 
