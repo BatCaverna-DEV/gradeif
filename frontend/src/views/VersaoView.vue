@@ -1,30 +1,44 @@
 <template>
   <div>
-    <header class="d-flex flex-wrap justify-content-between align-items-start gap-2 mb-3">
-      <div>
-        <RouterLink :to="{ name: 'versoes' }" class="small">← Horários</RouterLink>
-        <h1 class="h3 mb-1">{{ versao?.nome ?? 'Horário' }}</h1>
-        <div v-if="versao" class="d-flex flex-wrap gap-2 align-items-center small">
-          <BBadge v-if="avaliacao" :variant="avaliacao.valida ? 'success' : 'danger'">
-            {{ avaliacao.valida ? 'Válida' : `${avaliacao.custoRigido} violação(ões) rígida(s)` }}
-          </BBadge>
-          <span v-if="avaliacao">Pontuação {{ formatarNumero(avaliacao.pontuacao) }}</span>
-          <span
-            v-if="avaliacao && versao.pontuacao != null && versao.pontuacao !== avaliacao.pontuacao"
-            class="text-body-secondary"
-            title="Os dados ou os pesos mudaram desde a geração"
-          >
-            (na geração: {{ formatarNumero(versao.pontuacao) }})
-          </span>
-          <span class="text-body-secondary">
-            · {{ versao.totalAulas }} aulas ·
-            {{ versao.origem === 'solver' ? 'gerada' : 'manual' }} em
-            {{ formatarDataHora(versao.criadaEm) }}
-          </span>
-          <BBadge v-if="versao.publicada" variant="primary">Publicado</BBadge>
-        </div>
-      </div>
-      <div v-if="versao" class="d-flex gap-2">
+    <!-- Cabeçalho compacto: uma linha, para a grade ficar com a maior parte da tela. -->
+    <header class="cabecalho-grade d-flex flex-wrap align-items-center gap-2 mb-2">
+      <RouterLink
+        :to="{ name: 'versoes' }"
+        class="btn btn-sm btn-light"
+        title="Voltar para os horários"
+        aria-label="Voltar para os horários"
+        ><i class="bi bi-arrow-left" aria-hidden="true"
+      /></RouterLink>
+      <h1 class="h5 mb-0 text-truncate">{{ versao?.nome ?? 'Horário' }}</h1>
+      <template v-if="versao">
+        <BBadge v-if="versao.publicada" variant="primary">Publicado</BBadge>
+        <BBadge v-if="avaliacao" :variant="avaliacao.valida ? 'success' : 'danger'">
+          {{ avaliacao.valida ? 'Válida' : `${avaliacao.custoRigido} rígida(s)` }}
+        </BBadge>
+        <span v-if="avaliacao" class="small"
+          >Pontuação {{ formatarNumero(avaliacao.pontuacao) }}</span
+        >
+        <span
+          v-if="avaliacao && versao.pontuacao != null && versao.pontuacao !== avaliacao.pontuacao"
+          class="small text-body-secondary"
+          title="Os dados ou os pesos mudaram desde a geração"
+        >
+          (na geração: {{ formatarNumero(versao.pontuacao) }})
+        </span>
+        <span
+          class="small text-body-secondary d-none d-xxl-inline"
+          :title="`${versao.origem === 'solver' ? 'Gerada' : 'Manual'} em ${formatarDataHora(versao.criadaEm)}`"
+        >
+          · {{ versao.totalAulas }} aulas
+        </span>
+        <EditorDoHorario
+          v-if="!versao.publicada"
+          selo
+          :versao="versao"
+          @atualizado="(v) => (versao = v)"
+        />
+      </template>
+      <div v-if="versao" class="d-flex flex-wrap gap-1 ms-auto">
         <RouterLink
           :to="{ name: 'horario-atribuicoes', params: { id } }"
           class="btn btn-sm btn-outline-secondary"
@@ -41,15 +55,11 @@
           class="btn btn-sm btn-primary"
           >{{ auth.ehEditorDe(versao) ? 'Editar' : 'Abrir no editor' }}</RouterLink
         >
+        <ControlesDaGrade />
       </div>
     </header>
 
     <BAlert :model-value="!!erro" variant="danger">{{ erro }}</BAlert>
-    <EditorDoHorario
-      v-if="versao && !versao.publicada"
-      :versao="versao"
-      @atualizado="(v) => (versao = v)"
-    />
     <div v-if="carregando" class="text-center py-5"><BSpinner label="Carregando" /></div>
 
     <template v-else-if="versao && gradeHoraria">
@@ -57,7 +67,7 @@
         {{ a }}
       </BAlert>
 
-      <div v-if="custosNaoZerados.length" class="d-flex flex-wrap gap-1 mb-3">
+      <div v-if="custosNaoZerados.length" class="d-flex flex-wrap gap-1 mb-2">
         <span
           v-for="c in custosNaoZerados"
           :key="c.codigo"
@@ -70,9 +80,9 @@
       </div>
 
       <BRow class="g-3">
-        <BCol cols="12" xl="8">
+        <BCol cols="12" :xl="painelRecolhido ? 12 : 8" :xxl="painelRecolhido ? 12 : 9">
           <BCard no-body>
-            <div class="d-flex flex-wrap gap-2 align-items-center p-2 border-bottom">
+            <div class="d-flex flex-wrap gap-2 align-items-center px-2 py-1 border-bottom">
               <BButtonGroup size="sm" aria-label="Visão da grade">
                 <BButton
                   v-for="v in VISOES"
@@ -110,45 +120,70 @@
               <span class="small text-body-secondary ms-auto"
                 >{{ aulasVisiveis.length }} aulas</span
               >
+              <BButton
+                v-if="painelRecolhido"
+                size="sm"
+                :variant="avaliacao?.violacoes.length ? 'outline-danger' : 'outline-secondary'"
+                title="Abrir o painel de violações"
+                @click="abrirPainel"
+                >Violações
+                <span class="badge text-bg-light">{{
+                  avaliacao?.violacoes.length ?? 0
+                }}</span></BButton
+              >
             </div>
-            <GradeSemanal
-              :grade-horaria="gradeHoraria"
-              :aulas="aulasVisiveis"
-              :visao="visao"
-              :destaque="destaque"
-              :turnos-abertos="turnosAbertosDaVisao"
-              :fechados="fechadosDaVisao"
-              :titulo="`Grade de ${rotuloRecurso}`"
-              @selecionar="selecionarAula"
-            />
+            <div ref="areaGrade">
+              <GradeSemanal
+                :grade-horaria="gradeHoraria"
+                :aulas="aulasVisiveis"
+                :visao="visao"
+                :destaque="destaque"
+                :turnos-abertos="turnosAbertosDaVisao"
+                :fechados="fechadosDaVisao"
+                :compacta="gradeCompacta"
+                :altura-maxima="alturaGrade"
+                :titulo="`Grade de ${rotuloRecurso}`"
+                @selecionar="selecionarAula"
+              />
+            </div>
           </BCard>
         </BCol>
 
-        <BCol cols="12" xl="4">
-          <BCard v-if="aulaSelecionada" class="mb-3" body-class="small">
-            <div class="d-flex justify-content-between">
-              <strong>{{ aulaSelecionada.sigla }} — {{ aulaSelecionada.disciplina }}</strong>
-              <BCloseButton aria-label="Fechar detalhe" @click="limparSelecao" />
-            </div>
-            <div>Turma {{ aulaSelecionada.turma }}</div>
-            <div>{{ aulaSelecionada.professores.map((p) => p.nome).join(', ') }}</div>
-            <div>
-              {{ aulaSelecionada.sala ?? 'Sem sala' }} ·
-              {{ rotuloHorario(aulaSelecionada.horarioId) }}
-            </div>
-            <div v-if="aulaSelecionada.fixada" class="text-body-secondary">
-              Fixada para as próximas gerações.
-            </div>
-            <div v-if="aulaSelecionada.revisar" class="text-warning-emphasis">
-              Marcada para revisão depois de uma reimportação.
-            </div>
-            <div class="mt-2 fw-semibold">
-              {{ violacoesDaAula.length ? 'Violações desta aula' : 'Nenhuma violação nesta aula.' }}
-            </div>
-            <ul class="mb-0 ps-3">
-              <li v-for="(v, k) in violacoesDaAula" :key="k">{{ v.codigo }}: {{ v.mensagem }}</li>
-            </ul>
-          </BCard>
+        <BCol v-show="!painelRecolhido" cols="12" xl="4" xxl="3">
+          <!-- Com o painel recolhido, a aula escolhida aparece num cartão flutuante. -->
+          <Teleport to="body" :disabled="!painelRecolhido">
+            <BCard
+              v-if="aulaSelecionada"
+              class="mb-3"
+              :class="{ 'selecao-flutuante': painelRecolhido }"
+              body-class="small"
+            >
+              <div class="d-flex justify-content-between">
+                <strong>{{ aulaSelecionada.sigla }} — {{ aulaSelecionada.disciplina }}</strong>
+                <BCloseButton aria-label="Fechar detalhe" @click="limparSelecao" />
+              </div>
+              <div>Turma {{ aulaSelecionada.turma }}</div>
+              <div>{{ aulaSelecionada.professores.map((p) => p.nome).join(', ') }}</div>
+              <div>
+                {{ aulaSelecionada.sala ?? 'Sem sala' }} ·
+                {{ rotuloHorario(aulaSelecionada.horarioId) }}
+              </div>
+              <div v-if="aulaSelecionada.fixada" class="text-body-secondary">
+                Fixada para as próximas gerações.
+              </div>
+              <div v-if="aulaSelecionada.revisar" class="text-warning-emphasis">
+                Marcada para revisão depois de uma reimportação.
+              </div>
+              <div class="mt-2 fw-semibold">
+                {{
+                  violacoesDaAula.length ? 'Violações desta aula' : 'Nenhuma violação nesta aula.'
+                }}
+              </div>
+              <ul class="mb-0 ps-3">
+                <li v-for="(v, k) in violacoesDaAula" :key="k">{{ v.codigo }}: {{ v.mensagem }}</li>
+              </ul>
+            </BCard>
+          </Teleport>
 
           <BCard header-tag="h2" header-class="h6 mb-0" header="Violações">
             <p class="small text-body-secondary">
@@ -186,11 +221,14 @@ import {
 import { http, mensagemDeErro } from '@/api/http'
 import { useAuthStore } from '@/stores/auth'
 import { usePeriodoStore } from '@/stores/periodo'
+import ControlesDaGrade from '@/components/ControlesDaGrade.vue'
 import EditorDoHorario from '@/components/EditorDoHorario.vue'
 import GradeSemanal from '@/components/GradeSemanal.vue'
 import PainelViolacoes from '@/components/PainelViolacoes.vue'
 import { DIAS, formatarDataHora, formatarNumero } from '@/utils/formato'
 import { mapaDeIndisponiveis, temposFechados, turnosAbertos } from '@/utils/disponibilidadeTurma'
+import { gradeCompacta, menuRecolhido, painelRecolhido } from '@/utils/preferencias'
+import { useAlturaDaGrade } from '@/utils/alturaDaGrade'
 
 const props = defineProps({ id: { type: Number, required: true } })
 
@@ -384,11 +422,39 @@ function rotuloHorario(horarioId) {
   const turno = gradeHoraria.value.turnos.find((t) => t.id === h.turnoId)?.nome ?? ''
   return `${DIAS[h.diaSemana]}, ${h.ordem}º tempo (${turno}), ${h.horaInicio}–${h.horaFim}`
 }
+
+// ---------- Espaço da grade ----------
+// Painel da direita recolhível; a grade ocupa o resto da tela, com rolagem própria.
+const abrirPainel = () => (painelRecolhido.value = false)
+const areaGrade = ref(null)
+const alturaGrade = useAlturaDaGrade(areaGrade, () => [
+  carregando.value,
+  erro.value,
+  avaliacao.value,
+  painelRecolhido.value,
+  menuRecolhido.value,
+  visao.value,
+])
 </script>
 
 <style scoped>
 .seletor-recurso {
   width: auto;
-  min-width: 12rem;
+  min-width: 10rem;
+  max-width: 16rem;
+}
+.cabecalho-grade h1 {
+  max-width: 22rem;
+}
+/* Aula escolhida com o painel recolhido: cartão flutuante no canto da tela. */
+.selecao-flutuante {
+  position: fixed;
+  right: 1rem;
+  bottom: 1rem;
+  width: min(340px, calc(100vw - 2rem));
+  max-height: 60vh;
+  overflow-y: auto;
+  z-index: 1035;
+  box-shadow: var(--gf-sombra-forte, 0 0.5rem 1.5rem rgba(0, 0, 0, 0.2));
 }
 </style>

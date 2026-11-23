@@ -1,24 +1,31 @@
 <template>
   <div>
-    <header class="d-flex flex-wrap justify-content-between align-items-start gap-2 mb-3">
-      <div>
-        <RouterLink :to="{ name: 'versoes' }" class="small">← Horários</RouterLink>
-        <h1 class="h3 mb-1">Editor · {{ versao?.nome ?? '' }}</h1>
-        <div
-          v-if="avaliacao"
-          class="d-flex flex-wrap gap-2 align-items-center small"
-          aria-live="polite"
-        >
-          <BBadge :variant="avaliacao.valida ? 'success' : 'danger'">
-            {{ avaliacao.valida ? 'Válida' : `${avaliacao.custoRigido} violação(ões) rígida(s)` }}
-          </BBadge>
-          <span>Pontuação {{ formatarNumero(avaliacao.pontuacao) }}</span>
-          <span v-if="ultimaVariacao" :class="ultimaVariacao.classe">{{
-            ultimaVariacao.texto
-          }}</span>
-        </div>
-      </div>
-      <div class="d-flex flex-wrap gap-2">
+    <!-- Cabeçalho compacto: uma linha, para a grade ficar com a maior parte da tela. -->
+    <header class="cabecalho-grade d-flex flex-wrap align-items-center gap-2 mb-2">
+      <RouterLink
+        :to="{ name: 'versoes' }"
+        class="btn btn-sm btn-light"
+        title="Voltar para os horários"
+        aria-label="Voltar para os horários"
+        ><i class="bi bi-arrow-left" aria-hidden="true"
+      /></RouterLink>
+      <h1 class="h5 mb-0 text-truncate">Editor · {{ versao?.nome ?? '' }}</h1>
+      <template v-if="avaliacao">
+        <BBadge :variant="avaliacao.valida ? 'success' : 'danger'" aria-live="polite">
+          {{ avaliacao.valida ? 'Válida' : `${avaliacao.custoRigido} rígida(s)` }}
+        </BBadge>
+        <span class="small">Pontuação {{ formatarNumero(avaliacao.pontuacao) }}</span>
+        <span v-if="ultimaVariacao" class="small" :class="ultimaVariacao.classe">{{
+          ultimaVariacao.texto
+        }}</span>
+      </template>
+      <EditorDoHorario
+        v-if="versao && !versao.publicada"
+        selo
+        :versao="versao"
+        @atualizado="(v) => (versao = v)"
+      />
+      <div class="d-flex flex-wrap gap-1 ms-auto">
         <BButton
           size="sm"
           variant="outline-secondary"
@@ -40,49 +47,38 @@
           >↷ Refazer</BButton
         >
         <RouterLink
-          :to="{ name: 'versao', params: { id } }"
-          class="btn btn-sm btn-outline-secondary"
-          >Resumo</RouterLink
-        >
-        <RouterLink
           :to="{ name: 'horario-atribuicoes', params: { id } }"
           class="btn btn-sm btn-outline-secondary"
           >Atribuições</RouterLink
         >
-        <RouterLink
-          :to="{ name: 'comparar', query: { a: id } }"
-          class="btn btn-sm btn-outline-secondary"
-          >Comparar</RouterLink
-        >
-        <RouterLink
-          v-if="editavel"
-          :to="{ name: 'geracao', query: { horario: id } }"
-          class="btn btn-sm btn-outline-primary"
-          title="Gera este horário de novo, mantendo as aulas fixadas"
-          >Regenerar o resto</RouterLink
-        >
+        <BDropdown size="sm" variant="outline-secondary" text="Mais" end>
+          <BDropdownItem :to="{ name: 'versao', params: { id } }">Resumo</BDropdownItem>
+          <BDropdownItem :to="{ name: 'comparar', query: { a: id } }">Comparar</BDropdownItem>
+          <BDropdownItem
+            v-if="editavel"
+            :to="{ name: 'geracao', query: { horario: id } }"
+            title="Gera este horário de novo, mantendo as aulas fixadas"
+            >Regenerar o resto</BDropdownItem
+          >
+        </BDropdown>
+        <ControlesDaGrade />
       </div>
     </header>
 
     <BAlert :model-value="!!erro" variant="danger" dismissible @update:model-value="erro = ''">
       {{ erro }}
     </BAlert>
-    <BAlert :model-value="!!versao?.publicada" variant="info">
+    <BAlert :model-value="!!versao?.publicada" variant="info" class="py-2">
       Este horário está publicado e não pode ser alterado. Duplique-o na tela de horários para
       ajustar.
     </BAlert>
-    <EditorDoHorario
-      v-if="versao && !versao.publicada"
-      :versao="versao"
-      @atualizado="(v) => (versao = v)"
-    />
 
     <div v-if="carregando" class="text-center py-5"><BSpinner label="Carregando" /></div>
 
     <BRow v-else-if="versao && gradeHoraria" class="g-3">
-      <BCol cols="12" xl="8">
+      <BCol cols="12" :xl="painelRecolhido ? 12 : 8" :xxl="painelRecolhido ? 12 : 9">
         <BCard no-body>
-          <div class="d-flex flex-wrap gap-2 align-items-center p-2 border-bottom">
+          <div class="d-flex flex-wrap gap-2 align-items-center px-2 py-1 border-bottom">
             <BButtonGroup size="sm" aria-label="Visão da grade">
               <BButton
                 v-for="v in VISOES"
@@ -100,18 +96,33 @@
               :options="opcoesRecurso"
               :aria-label="`Escolher ${visao}`"
             />
-            <span class="small text-body-secondary ms-auto">{{ instrucao }}</span>
+            <!-- Legenda na mesma linha (antes era uma linha própria). -->
+            <span class="legenda small text-nowrap" aria-hidden="true">
+              <span class="amostra nivel-livre"></span> livre
+              <span class="amostra nivel-flexivel"></span> flexível
+              <span class="amostra nivel-rigida"></span> rígida
+              <template v-if="selecao?.tipo === 'faltante'">
+                <span class="amostra professor-livre"></span> prof. disponível
+                <span class="amostra professor-evitar"></span> prefere evitar
+              </template>
+            </span>
+            <span class="ms-auto" />
+            <!-- Abaixo de 1400px some: o cartão da aula escolhida já orienta. -->
+            <span class="small text-body-secondary d-none d-xxl-inline">{{ instrucao }}</span>
+            <!-- Com o painel recolhido, os contadores ficam aqui e abrem o painel. -->
+            <span v-if="painelRecolhido" class="d-flex gap-1">
+              <BButton
+                v-for="c in contadoresDoPainel"
+                :key="c.aba"
+                size="sm"
+                :variant="c.total ? c.variante : 'outline-secondary'"
+                :title="`Abrir o painel em ${c.rotulo}`"
+                @click="abrirPainel(c.aba)"
+                >{{ c.rotulo }} <span class="badge text-bg-light">{{ c.total }}</span></BButton
+              >
+            </span>
           </div>
-          <div class="legenda small px-2 pt-2" aria-hidden="true">
-            <span class="amostra nivel-livre"></span> livre
-            <span class="amostra nivel-flexivel"></span> viola flexível
-            <span class="amostra nivel-rigida"></span> viola rígida
-            <template v-if="selecao?.tipo === 'faltante'">
-              <span class="amostra professor-livre"></span> professor disponível
-              <span class="amostra professor-evitar"></span> professor prefere evitar
-            </template>
-          </div>
-          <div :class="{ 'opacity-50': ocupado }">
+          <div ref="areaGrade" :class="{ 'opacity-50': ocupado }">
             <GradeDias
               v-if="visao === 'dias'"
               :grade-horaria="gradeHoraria"
@@ -126,6 +137,8 @@
               :turma-alvo="turmaAlvo"
               :selecionada="selecao?.tipo === 'aula' ? selecao.aula.id : null"
               :mostrar-professor="selecao?.tipo === 'faltante'"
+              :compacta="gradeCompacta"
+              :altura-maxima="alturaGrade"
               :titulo="`Turno ${rotuloRecurso}, todos os dias`"
               @selecionar="selecionarAula"
               @arrastar="selecionarAula($event, true)"
@@ -144,6 +157,8 @@
               :celulas="simulacao"
               :selecionada="selecao?.tipo === 'aula' ? selecao.aula.id : null"
               :mostrar-professor="selecao?.tipo === 'faltante'"
+              :compacta="gradeCompacta"
+              :altura-maxima="alturaGrade"
               :titulo="`Grade de ${rotuloRecurso}`"
               @selecionar="selecionarAula"
               @arrastar="selecionarAula($event, true)"
@@ -154,68 +169,84 @@
         </BCard>
       </BCol>
 
-      <BCol cols="12" xl="4">
-        <BCard v-if="selecao" class="mb-3" body-class="small">
-          <div class="d-flex justify-content-between align-items-start">
-            <div>
-              <strong>{{ sel.sigla }} — {{ sel.disciplina }}</strong>
-              <div>Turma {{ sel.turma }} · {{ sel.professores.map((p) => p.nome).join(', ') }}</div>
-              <div v-if="selecao.tipo === 'aula'">
-                {{ rotuloHorario(sel.horarioId) }} · {{ sel.sala ?? 'sem sala' }}
+      <BCol v-show="!painelRecolhido" cols="12" xl="4" xxl="3">
+        <!-- Com o painel recolhido, a aula escolhida aparece num cartão flutuante. -->
+        <Teleport to="body" :disabled="!painelRecolhido">
+          <BCard
+            v-if="selecao"
+            class="mb-3"
+            :class="{ 'selecao-flutuante': painelRecolhido }"
+            body-class="small"
+          >
+            <div class="d-flex justify-content-between align-items-start">
+              <div>
+                <strong>{{ sel.sigla }} — {{ sel.disciplina }}</strong>
+                <div>
+                  Turma {{ sel.turma }} · {{ sel.professores.map((p) => p.nome).join(', ') }}
+                </div>
+                <div v-if="selecao.tipo === 'aula'">
+                  {{ rotuloHorario(sel.horarioId) }} · {{ sel.sala ?? 'sem sala' }}
+                </div>
+                <div v-else>{{ selecao.faltante.faltam }} aula(s) sem lugar</div>
               </div>
-              <div v-else>{{ selecao.faltante.faltam }} aula(s) sem lugar</div>
+              <BCloseButton aria-label="Cancelar seleção" @click="limparSelecao" />
             </div>
-            <BCloseButton aria-label="Cancelar seleção" @click="limparSelecao" />
-          </div>
-          <p class="text-body-secondary mt-2 mb-2">
-            <BSpinner v-if="simulando" small class="me-1" />
-            {{
-              simulando
-                ? 'Calculando as posições…'
-                : 'Clique numa célula colorida ou arraste o cartão. Sobre outra aula, propõe a troca.'
-            }}
-          </p>
-          <template v-if="selecao.tipo === 'aula' && editavel">
-            <div class="d-flex flex-wrap gap-2 align-items-center">
-              <BButton
+            <p class="text-body-secondary mt-2 mb-2">
+              <BSpinner v-if="simulando" small class="me-1" />
+              {{
+                simulando
+                  ? 'Calculando as posições…'
+                  : 'Clique numa célula colorida ou arraste o cartão. Sobre outra aula, propõe a troca.'
+              }}
+            </p>
+            <template v-if="selecao.tipo === 'aula' && editavel">
+              <div class="d-flex flex-wrap gap-2 align-items-center">
+                <BButton
+                  size="sm"
+                  variant="outline-secondary"
+                  :disabled="ocupado"
+                  @click="alternarFixada(sel)"
+                >
+                  {{ sel.fixada ? '🔓 Liberar' : '🔒 Fixar' }}
+                </BButton>
+                <BButton
+                  v-if="sel.revisar"
+                  size="sm"
+                  variant="outline-warning"
+                  :disabled="ocupado"
+                  @click="marcarRevisada(sel)"
+                  >Marcar revisada</BButton
+                >
+                <BButton
+                  size="sm"
+                  variant="outline-danger"
+                  :disabled="ocupado"
+                  @click="remover(sel)"
+                  >Tirar da grade</BButton
+                >
+              </div>
+              <label for="sala-aula" class="form-label mt-2 mb-1">Sala</label>
+              <BFormSelect
+                id="sala-aula"
                 size="sm"
-                variant="outline-secondary"
+                :model-value="sel.salaId"
+                :options="opcoesSala"
                 :disabled="ocupado"
-                @click="alternarFixada(sel)"
-              >
-                {{ sel.fixada ? '🔓 Liberar' : '🔒 Fixar' }}
-              </BButton>
-              <BButton
-                v-if="sel.revisar"
-                size="sm"
-                variant="outline-warning"
-                :disabled="ocupado"
-                @click="marcarRevisada(sel)"
-                >Marcar revisada</BButton
-              >
-              <BButton size="sm" variant="outline-danger" :disabled="ocupado" @click="remover(sel)"
-                >Tirar da grade</BButton
-              >
-            </div>
-            <label for="sala-aula" class="form-label mt-2 mb-1">Sala</label>
-            <BFormSelect
-              id="sala-aula"
-              size="sm"
-              :model-value="sel.salaId"
-              :options="opcoesSala"
-              :disabled="ocupado"
-              @update:model-value="trocarSala(sel, $event)"
-            />
-            <div class="mt-2 fw-semibold">
-              {{ violacoesDaAula.length ? 'Violações desta aula' : 'Nenhuma violação nesta aula.' }}
-            </div>
-            <ul class="mb-0 ps-3">
-              <li v-for="(v, k) in violacoesDaAula" :key="k">{{ v.codigo }}: {{ v.mensagem }}</li>
-            </ul>
-          </template>
-        </BCard>
+                @update:model-value="trocarSala(sel, $event)"
+              />
+              <div class="mt-2 fw-semibold">
+                {{
+                  violacoesDaAula.length ? 'Violações desta aula' : 'Nenhuma violação nesta aula.'
+                }}
+              </div>
+              <ul class="mb-0 ps-3">
+                <li v-for="(v, k) in violacoesDaAula" :key="k">{{ v.codigo }}: {{ v.mensagem }}</li>
+              </ul>
+            </template>
+          </BCard>
+        </Teleport>
 
-        <BCard no-body>
+        <BCard no-body class="painel-lateral">
           <BTabs v-model="aba" card nav-wrapper-class="px-2 pt-2" small>
             <BTab id="faltantes" :title="`Não alocadas (${totalFaltantes})`">
               <p v-if="!faltantesVisiveis.length" class="small text-body-secondary mb-0">
@@ -321,6 +352,8 @@ import {
   BCard,
   BCloseButton,
   BCol,
+  BDropdown,
+  BDropdownItem,
   BFormSelect,
   BModal,
   BRow,
@@ -331,12 +364,15 @@ import {
 import { http, mensagemDeErro } from '@/api/http'
 import { useAuthStore } from '@/stores/auth'
 import { usePeriodoStore } from '@/stores/periodo'
+import ControlesDaGrade from '@/components/ControlesDaGrade.vue'
 import EditorDoHorario from '@/components/EditorDoHorario.vue'
 import GradeDias from '@/components/GradeDias.vue'
 import GradeSemanal from '@/components/GradeSemanal.vue'
 import PainelViolacoes from '@/components/PainelViolacoes.vue'
 import { DIAS, formatarNumero } from '@/utils/formato'
 import { mapaDeIndisponiveis, temposFechados, turnosAbertos } from '@/utils/disponibilidadeTurma'
+import { gradeCompacta, menuRecolhido, painelRecolhido } from '@/utils/preferencias'
+import { useAlturaDaGrade } from '@/utils/alturaDaGrade'
 
 const props = defineProps({ id: { type: Number, required: true } })
 
@@ -528,7 +564,7 @@ const turmaAlvo = computed(() => sel.value?.turmaId ?? null)
 
 const instrucao = computed(() => {
   if (!editavel.value) return 'Somente leitura'
-  if (!selecao.value) return 'Clique ou arraste uma aula para ver onde ela cabe'
+  if (!selecao.value) return 'Clique ou arraste uma aula'
   return 'Escolha o destino · Esc cancela'
 })
 
@@ -857,6 +893,35 @@ const faltantesVisiveis = computed(() =>
 const totalFaltantes = computed(() => faltantesVisiveis.value.reduce((s, f) => s + f.faltam, 0))
 const aRevisar = computed(() => aulas.value.filter((a) => a.revisar))
 
+// ---------- Painel da direita recolhível ----------
+// Recolhido, os contadores ficam na barra da grade e abrem o painel na aba certa.
+const contadoresDoPainel = computed(() => [
+  { aba: 'faltantes', rotulo: 'Não alocadas', total: totalFaltantes.value, variante: 'danger' },
+  { aba: 'revisar', rotulo: 'Revisar', total: aRevisar.value.length, variante: 'warning' },
+  {
+    aba: 'violacoes',
+    rotulo: 'Violações',
+    total: avaliacao.value?.violacoes.length ?? 0,
+    variante: 'outline-danger',
+  },
+])
+function abrirPainel(qual) {
+  aba.value = qual
+  painelRecolhido.value = false
+}
+
+// ---------- Altura da grade ----------
+// A grade ocupa o resto da tela, com rolagem própria e cabeçalho fixo.
+const areaGrade = ref(null)
+const alturaGrade = useAlturaDaGrade(areaGrade, () => [
+  carregando.value,
+  erro.value,
+  versao.value?.publicada,
+  painelRecolhido.value,
+  menuRecolhido.value,
+  visao.value,
+])
+
 function irParaAula(a) {
   // Na visão por dias, vai para o turno da aula; nas outras, para a turma dela.
   if (visao.value === 'dias') trocarVisao('dias', horarioPorId.value.get(a.horarioId)?.turnoId)
@@ -905,11 +970,26 @@ watch(() => [props.id, periodoStore.ativoId], carregar, { immediate: true })
 <style scoped>
 .seletor-recurso {
   width: auto;
-  min-width: 12rem;
+  min-width: 10rem;
+  max-width: 16rem;
+}
+.cabecalho-grade h1 {
+  max-width: 22rem;
 }
 .lista {
   max-height: 60vh;
   overflow-y: auto;
+}
+/* Aula escolhida com o painel recolhido: cartão flutuante no canto da tela. */
+.selecao-flutuante {
+  position: fixed;
+  right: 1rem;
+  bottom: 1rem;
+  width: min(340px, calc(100vw - 2rem));
+  max-height: 60vh;
+  overflow-y: auto;
+  z-index: 1035;
+  box-shadow: var(--gf-sombra-forte, 0 0.5rem 1.5rem rgba(0, 0, 0, 0.2));
 }
 .item-lista {
   display: block;

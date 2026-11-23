@@ -9,8 +9,17 @@
 -->
 <template>
   <div>
-    <div class="table-responsive">
-      <table class="table table-bordered table-sm grade mb-0" :aria-label="titulo">
+    <!-- Com alturaMaxima, a grade rola por dentro e o cabeçalho e os tempos ficam fixos. -->
+    <div
+      class="table-responsive rolagem-grade"
+      :class="{ 'com-altura': !!alturaMaxima }"
+      :style="alturaMaxima ? { maxHeight: alturaMaxima } : undefined"
+    >
+      <table
+        class="table table-bordered table-sm grade mb-0"
+        :class="{ compacta }"
+        :aria-label="titulo"
+      >
         <thead>
           <tr>
             <th scope="col" class="coluna-tempo">Tempo</th>
@@ -90,30 +99,21 @@
                   </span>
                 </span>
                 <span class="d-block linha">{{ linha1(a) }}</span>
-                <span class="d-block linha text-body-secondary">{{ linha2(a) }}</span>
+                <span v-if="linha2(a)" class="d-block linha text-body-secondary">{{
+                  linha2(a)
+                }}</span>
               </button>
             </td>
           </tr>
         </tbody>
       </table>
     </div>
-    <!-- Legenda das cores (na visão por professor, todas as aulas são da mesma pessoa). -->
-    <ul
-      v-if="visao !== 'professor' && legenda.length"
-      class="legenda list-unstyled d-flex flex-wrap gap-2 small mt-2 mb-0"
-      aria-label="Cores dos professores"
-    >
-      <li v-for="p in legenda" :key="p.id" class="d-flex align-items-center gap-1">
-        <span class="amostra" :style="{ background: p.cor }" aria-hidden="true" />
-        {{ p.nome }}
-      </li>
-    </ul>
   </div>
 </template>
 
 <script setup>
 import { computed, ref } from 'vue'
-import { DIAS } from '@/utils/formato'
+import { DIAS, nomeCurto } from '@/utils/formato'
 
 const props = defineProps({
   gradeHoraria: { type: Object, required: true }, // { dias, turnos, horarios } da API
@@ -134,6 +134,10 @@ const props = defineProps({
   selecionada: { type: Number, default: null }, // id da aula selecionada
   // Marca as células em que o professor da aula selecionada está disponível.
   mostrarProfessor: { type: Boolean, default: false },
+  // Cartões compactos: professor com nome abreviado e sala só quando houver.
+  compacta: { type: Boolean, default: false },
+  // Altura máxima (CSS) da área da grade; sem ela, a página rola normalmente.
+  alturaMaxima: { type: String, default: null },
 })
 const emit = defineEmits(['selecionar', 'clicar-celula', 'arrastar', 'arrastar-fim', 'soltar'])
 
@@ -286,24 +290,19 @@ function estiloCartao(a) {
   }
 }
 
-const legenda = computed(() => {
-  const mapa = new Map()
-  for (const a of props.aulas)
-    for (const p of a.professores) if (p.cor && !mapa.has(p.id)) mapa.set(p.id, p)
-  return [...mapa.values()].sort((x, y) => x.nome.localeCompare(y.nome))
-})
-
-const nomesProfessores = (a) => a.professores.map((p) => p.nome).join(', ') || 'sem professor'
+const nomesProfessores = (a, curto = false) =>
+  a.professores.map((p) => (curto ? nomeCurto(p.nome) : p.nome)).join(', ') || 'sem professor'
 const nomeSala = (a) => a.sala ?? 'sem sala'
 
 function linha1(a) {
-  if (props.visao === 'turma') return nomesProfessores(a)
+  if (props.visao === 'turma') return nomesProfessores(a, props.compacta)
   return a.turma
 }
 
+// Compacta: a sala só aparece quando a aula tem uma.
 function linha2(a) {
-  if (props.visao === 'sala') return nomesProfessores(a)
-  return nomeSala(a)
+  if (props.visao === 'sala') return nomesProfessores(a, props.compacta)
+  return props.compacta ? (a.sala ?? '') : nomeSala(a)
 }
 
 function descricao(a) {
@@ -314,8 +313,13 @@ function descricao(a) {
 <style scoped>
 .grade {
   table-layout: fixed;
-  min-width: 640px;
+  min-width: 560px;
   background: var(--gf-superficie);
+  --bs-table-border-color: var(--gf-borda-grade);
+}
+/* Borda visível em todas as células (a do tema some sob os cartões coloridos). */
+.grade > :not(caption) > * > * {
+  border: 1px solid var(--gf-borda-grade);
 }
 /* Dias da semana em texto normal (o tema deixa cabeçalhos de tabela em maiúsculas). */
 .grade > thead th {
@@ -332,6 +336,43 @@ function descricao(a) {
   vertical-align: top;
   padding: 0.2rem;
   height: 3.6rem;
+}
+/* Grade do tamanho da tela: rola por dentro, com os dias e os tempos fixos. */
+.rolagem-grade.com-altura {
+  overflow: auto;
+}
+/* Célula fixa perde a borda ao rolar (border-collapse): a sombra faz a linha. */
+.com-altura .grade > thead th {
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  background: var(--bs-body-bg);
+  box-shadow: inset 0 -1px 0 var(--gf-borda-grade);
+}
+.com-altura .grade > tbody th.coluna-tempo {
+  position: sticky;
+  left: 0;
+  z-index: 2;
+  background: var(--bs-body-bg);
+  box-shadow: inset -1px 0 0 var(--gf-borda-grade);
+}
+.com-altura .grade > thead th.coluna-tempo {
+  left: 0;
+  z-index: 4;
+}
+/* Cartões compactos: células mais baixas e coluna dos tempos mais estreita. */
+.grade.compacta td {
+  height: 2.8rem;
+  padding: 0.15rem;
+}
+.grade.compacta .coluna-tempo {
+  width: 5.75rem;
+  font-size: 0.7rem;
+  white-space: nowrap;
+}
+.grade.compacta .cartao {
+  padding: 0.15rem 0.3rem;
+  line-height: 1.15;
 }
 /* Professor disponível: borda tracejada e um ponto no canto da célula. */
 .grade td:has(> .professor-livre) {
@@ -371,12 +412,6 @@ function descricao(a) {
   border-radius: 0.25rem;
   background: var(--fundo-professor, var(--bs-body-bg));
   color: var(--bs-body-color);
-}
-.legenda .amostra {
-  display: inline-block;
-  width: 0.9rem;
-  height: 0.9rem;
-  border-radius: 0.2rem;
 }
 .cartao:hover,
 .cartao:focus-visible {

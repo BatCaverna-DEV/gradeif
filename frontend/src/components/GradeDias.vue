@@ -15,10 +15,13 @@
     <p v-if="!turno || !colunas.length" class="text-body-secondary small p-3 mb-0">
       Nenhuma turma tem aula neste turno.
     </p>
-    <div v-else class="rolagem">
+    <div v-else class="rolagem" :style="{ maxHeight: alturaMaxima ?? '78vh' }">
       <table
         class="table table-bordered table-sm grade mb-0"
-        :style="{ minWidth: `${11 + colunas.length * 8}rem` }"
+        :class="{ compacta }"
+        :style="{
+          minWidth: compacta ? `${9.5 + colunas.length * 6.5}rem` : `${11 + colunas.length * 8}rem`,
+        }"
         :aria-label="titulo"
       >
         <thead>
@@ -47,7 +50,9 @@
               {{ DIAS[d] }}
             </th>
             <th scope="row" class="coluna-tempo fixa-2 small fw-normal text-body-secondary">
-              <span class="fw-semibold text-body">{{ tempo.ordem }}º Horário</span>
+              <span class="fw-semibold text-body"
+                >{{ tempo.ordem }}º<template v-if="!compacta"> Horário</template></span
+              >
               <span class="d-block">{{ tempo.horaInicio }}–{{ tempo.horaFim }}</span>
             </th>
             <td
@@ -109,30 +114,22 @@
                     >
                   </span>
                 </span>
-                <span class="d-block linha">{{ nomesProfessores(a) }}</span>
-                <span class="d-block linha text-body-secondary">{{ nomeSala(a) }}</span>
+                <span class="d-block linha">{{ nomesProfessores(a, compacta) }}</span>
+                <span v-if="!compacta || a.sala" class="d-block linha text-body-secondary">{{
+                  nomeSala(a)
+                }}</span>
               </button>
             </td>
           </tr>
         </tbody>
       </table>
     </div>
-    <ul
-      v-if="legenda.length"
-      class="legenda list-unstyled d-flex flex-wrap gap-2 small mt-2 mb-0 px-2"
-      aria-label="Cores dos professores"
-    >
-      <li v-for="p in legenda" :key="p.id" class="d-flex align-items-center gap-1">
-        <span class="amostra" :style="{ background: p.cor }" aria-hidden="true" />
-        {{ p.nome }}
-      </li>
-    </ul>
   </div>
 </template>
 
 <script setup>
 import { computed, ref } from 'vue'
-import { DIAS } from '@/utils/formato'
+import { DIAS, nomeCurto } from '@/utils/formato'
 import { temposFechados } from '@/utils/disponibilidadeTurma'
 
 const props = defineProps({
@@ -148,6 +145,10 @@ const props = defineProps({
   turmaAlvo: { type: Number, default: null }, // turma da aula escolhida
   selecionada: { type: Number, default: null }, // id da aula selecionada
   mostrarProfessor: { type: Boolean, default: false },
+  // Cartões compactos: professor abreviado, sala só quando houver, colunas mais estreitas.
+  compacta: { type: Boolean, default: false },
+  // Altura máxima (CSS) da área de rolagem; sem ela, 78% da janela.
+  alturaMaxima: { type: String, default: null },
   // Disponibilidade das turmas neste horário: Map(turmaId → Set(horarioId fechado)).
   indisponiveis: { type: Map, default: () => new Map() },
 })
@@ -344,14 +345,8 @@ function estiloCartao(a) {
   }
 }
 
-const legenda = computed(() => {
-  const mapa = new Map()
-  for (const a of props.aulas)
-    for (const p of a.professores) if (p.cor && !mapa.has(p.id)) mapa.set(p.id, p)
-  return [...mapa.values()].sort((x, y) => x.nome.localeCompare(y.nome))
-})
-
-const nomesProfessores = (a) => a.professores.map((p) => p.nome).join(', ') || 'sem professor'
+const nomesProfessores = (a, curto = false) =>
+  a.professores.map((p) => (curto ? nomeCurto(p.nome) : p.nome)).join(', ') || 'sem professor'
 const nomeSala = (a) => a.sala ?? 'sem sala'
 
 function descricao(a) {
@@ -368,14 +363,26 @@ function descricao(a) {
 <style scoped>
 /* Rolagem própria: o cabeçalho das turmas e as colunas de dia e horário ficam fixos. */
 .rolagem {
-  max-height: 78vh;
   overflow: auto;
 }
 .grade {
+  --largura-dia: 5.5rem;
   table-layout: fixed;
   background: var(--gf-superficie);
   border-collapse: separate;
   border-spacing: 0;
+  /* Bordas separadas (para as partes fixas): cada célula desenha a da direita e a
+     de baixo, e a tabela a de cima e a da esquerda, sem linhas duplas. */
+  border-top: 1px solid var(--gf-borda-grade);
+  border-left: 1px solid var(--gf-borda-grade);
+}
+.grade > :not(caption) > * > * {
+  border-width: 0 1px 1px 0;
+  border-style: solid;
+  border-color: var(--gf-borda-grade);
+}
+.grade.compacta {
+  --largura-dia: 5rem;
 }
 .grade > thead th {
   position: sticky;
@@ -392,10 +399,13 @@ function descricao(a) {
   box-shadow: inset 0 -3px 0 var(--bs-primary);
 }
 .coluna-dia {
-  width: 5.5rem;
+  width: var(--largura-dia);
 }
 .coluna-tempo {
   width: 5.5rem;
+}
+.compacta .coluna-tempo {
+  width: 5rem;
 }
 .fixa-1,
 .fixa-2 {
@@ -407,7 +417,7 @@ function descricao(a) {
   left: 0;
 }
 .fixa-2 {
-  left: 5.5rem;
+  left: var(--largura-dia);
 }
 .grade > thead th.fixa-1,
 .grade > thead th.fixa-2 {
@@ -422,8 +432,9 @@ tbody th.coluna-dia {
 .dia-par td {
   background-color: var(--bs-tertiary-bg);
 }
-tbody tr:first-child > * {
-  border-top: 2px solid var(--bs-border-color-translucent, var(--bs-border-color));
+/* Linha mais forte entre um dia e outro. */
+tbody + tbody tr:first-child > * {
+  border-top: 2px solid #9fb0a5;
 }
 .coluna-tempo .d-block {
   font-size: 0.7rem;
@@ -433,6 +444,12 @@ tbody tr:first-child > * {
   vertical-align: top;
   padding: 0.15rem;
   height: 3.3rem;
+}
+.grade.compacta td {
+  height: 2.8rem;
+}
+.grade.compacta .cartao {
+  padding: 0.15rem 0.3rem;
 }
 .grade td:has(> .professor-livre) {
   outline: 2px dashed var(--bs-success);
@@ -500,12 +517,6 @@ tbody tr:first-child > * {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-.legenda .amostra {
-  display: inline-block;
-  width: 0.9rem;
-  height: 0.9rem;
-  border-radius: 0.2rem;
 }
 .grade td.celula-choque {
   background: var(--bs-danger-bg-subtle);
