@@ -351,27 +351,16 @@
     </BModal>
 
     <!-- Horário do professor da aula escolhida, só para consulta. -->
-    <BModal
+    <HorarioDoProfessor
+      v-if="gradeHoraria"
       v-model="horarioDoProfessor.visivel"
-      :title="`Horário de ${horarioDoProfessor.nome}`"
-      size="xl"
-      ok-only
-      ok-title="Fechar"
-      ok-variant="secondary"
-    >
-      <p class="small text-body-secondary mb-2">
-        {{ aulasDoProfessor.length }} aula(s) na semana neste horário.
-      </p>
-      <GradeSemanal
-        v-if="gradeHoraria && horarioDoProfessor.visivel"
-        :grade-horaria="gradeHoraria"
-        :aulas="aulasDoProfessor"
-        visao="professor"
-        :selecionada="selecao?.tipo === 'aula' ? selecao.aula.id : null"
-        :compacta="gradeCompacta"
-        :titulo="`Grade de ${horarioDoProfessor.nome}`"
-      />
-    </BModal>
+      :professor="horarioDoProfessor.professor"
+      :versao-id="id"
+      :grade-horaria="gradeHoraria"
+      :aulas="aulas"
+      :selecionada="selecao?.tipo === 'aula' ? selecao.aula.id : null"
+      :compacta="gradeCompacta"
+    />
   </div>
 </template>
 
@@ -402,6 +391,7 @@ import ControlesDaGrade from '@/components/ControlesDaGrade.vue'
 import EditorDoHorario from '@/components/EditorDoHorario.vue'
 import GradeDias from '@/components/GradeDias.vue'
 import GradeSemanal from '@/components/GradeSemanal.vue'
+import HorarioDoProfessor from '@/components/HorarioDoProfessor.vue'
 import PainelViolacoes from '@/components/PainelViolacoes.vue'
 import { DIAS, formatarNumero } from '@/utils/formato'
 import { mapaDeIndisponiveis, temposFechados, turnosAbertos } from '@/utils/disponibilidadeTurma'
@@ -614,14 +604,9 @@ function daVisao(a) {
 const aulasVisiveis = computed(() => aulas.value.filter(daVisao))
 
 // ---------- Horário do professor (modal aberto pelo cartão da aula) ----------
-const horarioDoProfessor = reactive({ visivel: false, id: null, nome: '' })
-const aulasDoProfessor = computed(() =>
-  horarioDoProfessor.id === null
-    ? []
-    : aulas.value.filter((a) => a.professores.some((p) => p.id === horarioDoProfessor.id))
-)
+const horarioDoProfessor = reactive({ visivel: false, professor: null })
 function abrirHorarioDoProfessor(professor) {
-  Object.assign(horarioDoProfessor, { visivel: true, id: professor.id, nome: professor.nome })
+  Object.assign(horarioDoProfessor, { visivel: true, professor })
 }
 
 function rotuloHorario(horarioId) {
