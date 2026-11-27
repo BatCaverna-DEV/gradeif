@@ -120,15 +120,20 @@ export async function estadoDoEditor(periodoId, versaoId) {
 
 // ---------- F4-01: simulação ----------
 
-// Sala para a aula i no horário h: a atual, se estiver livre e servir; senão a
-// primeira compatível livre; sem nenhuma livre, fica sem sala (a R7 aponta).
+// Sala para a aula i no horário h: a atual, se estiver livre e servir. O editor
+// só escolhe uma sala por conta própria (a primeira compatível livre) quando a R7
+// (tipo e capacidade da sala) está ativa, porque aí aula sem sala é violação
+// rígida. Com a R7 desativada, o tipo da sala não importa e nenhuma sala é
+// escolhida: aula sem sala continua sem sala, e a que tem sala fica com ela se
+// estiver livre no destino; senão, fica sem.
 function salaPara(ctx, i, h) {
   const { inst, grade: g } = ctx
   if (inst.S === 0) return -1
   const livre = (s) =>
     !g.aulasDaSala(s, h).some((j) => j !== i) && inst.indisp.sala[s * inst.H + h] !== INDISPONIVEL
-  const compativeis = inst.atrSalas[g.atr[i]]
   const atual = g.sala[i]
+  if (!inst.config.R7?.ativa) return atual >= 0 && livre(atual) ? atual : -1
+  const compativeis = inst.atrSalas[g.atr[i]]
   if (atual >= 0 && compativeis.includes(atual) && livre(atual)) return atual
   return compativeis.find(livre) ?? -1
 }

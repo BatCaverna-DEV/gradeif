@@ -118,6 +118,27 @@ describe.skipIf(!banco)('editor manual (API)', () => {
     await agente.post(`${base}/simular`).send({}).expect(400)
   })
 
+  it('só escolhe sala por conta própria com a R7 ativa', async () => {
+    await db('aula').where({ id: ids.aulas[0] }).update({ sala_id: null })
+    const simular = async (dados) =>
+      (await agente.post(`${base}/simular`).send(dados).expect(200)).body.celulas.find(
+        (c) => c.horarioId === horario(3, 'Matutino', 1)
+      ).salaId
+
+    // R7 ativa (o padrão): aula sem sala é violação, e o editor escolhe uma.
+    expect(await simular({ aulaId: ids.aulas[0] })).toBe(ids.salas['Sala 1'])
+
+    // R7 desativada: aula sem sala continua sem sala, a aula nova também, e a que
+    // tem sala fica com a dela.
+    await db('restricao_config')
+      .insert({ periodo_id: ids.periodoId, codigo: 'R7', ativa: false, peso: 5 })
+      .onConflict(['periodo_id', 'codigo'])
+      .merge(['ativa'])
+    expect(await simular({ aulaId: ids.aulas[0] })).toBeNull()
+    expect(await simular({ atribuicaoId: ids.atr['INF1V MAT1'] })).toBeNull()
+    expect(await simular({ aulaId: ids.aulas[2] })).toBe(ids.salas['Lab. Informática'])
+  })
+
   it('move uma aula, limpa a revisão e atualiza a pontuação da versão', async () => {
     await db('aula').where({ id: ids.aulas[1] }).update({ revisar: true })
     const destino = horario(3, 'Matutino', 1)
