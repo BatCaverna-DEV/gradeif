@@ -117,6 +117,7 @@
                 @click="andar(1)"
                 >›</BButton
               >
+              <LegendaDisponibilidadeProfessor v-if="situacaoDaVisao" />
               <span class="small text-body-secondary ms-auto"
                 >{{ aulasVisiveis.length }} aulas</span
               >
@@ -140,6 +141,7 @@
                 :destaque="destaque"
                 :turnos-abertos="turnosAbertosDaVisao"
                 :fechados="fechadosDaVisao"
+                :situacao-professor="situacaoDaVisao"
                 :compacta="gradeCompacta"
                 :altura-maxima="alturaGrade"
                 :titulo="`Grade de ${rotuloRecurso}`"
@@ -252,6 +254,8 @@ import ControlesDaGrade from '@/components/ControlesDaGrade.vue'
 import EditorDoHorario from '@/components/EditorDoHorario.vue'
 import GradeSemanal from '@/components/GradeSemanal.vue'
 import HorarioDoProfessor from '@/components/HorarioDoProfessor.vue'
+import LegendaDisponibilidadeProfessor from '@/components/LegendaDisponibilidadeProfessor.vue'
+import { situacaoDoProfessor, turnosComTempoLivre } from '@/utils/disponibilidadeProfessor'
 import PainelViolacoes from '@/components/PainelViolacoes.vue'
 import { DIAS, formatarDataHora, formatarNumero } from '@/utils/formato'
 import { mapaDeIndisponiveis, temposFechados, turnosAbertos } from '@/utils/disponibilidadeTurma'
@@ -380,10 +384,40 @@ const aulasVisiveis = computed(() => aulas.value.filter((a) => daVisao(a)))
 const turmaDaVisao = computed(() =>
   visao.value === 'turma' ? turmas.value.find((t) => t.id === recursoId.value) : null
 )
-const turnosAbertosDaVisao = computed(() =>
-  turmaDaVisao.value
+const turnosAbertosDaVisao = computed(() => {
+  if (situacaoDaVisao.value)
+    return turnosComTempoLivre(gradeHoraria.value.horarios, situacaoDaVisao.value)
+  return turmaDaVisao.value
     ? [...turnosAbertos(turmaDaVisao.value, gradeHoraria.value.horarios, indisponiveis.value)]
     : []
+})
+
+// Na visão por professor, a disponibilidade dele neste horário, como no modal
+// "Horário do professor": indisponível e "prefere evitar" ficam riscados, e os
+// turnos com tempo livre aparecem mesmo sem aula.
+const itensDoProfessor = ref(null)
+watch(
+  [visao, recursoId, () => props.id, () => periodoStore.ativoId],
+  async ([tipo, professorId, versaoId, periodoId]) => {
+    itensDoProfessor.value = null
+    if (tipo !== 'professor' || !professorId || !periodoId) return
+    try {
+      const r = await http.get(
+        `/periodos/${periodoId}/disponibilidade/professor/${professorId}?versao=${versaoId}`
+      )
+      // Ignora a resposta se o professor da visão mudou enquanto ela chegava.
+      if (visao.value === 'professor' && recursoId.value === professorId)
+        itensDoProfessor.value = r.itens
+    } catch (e) {
+      erro.value = `Não foi possível ler a disponibilidade do professor: ${mensagemDeErro(e)}`
+    }
+  },
+  { immediate: true }
+)
+const situacaoDaVisao = computed(() =>
+  itensDoProfessor.value && gradeHoraria.value
+    ? situacaoDoProfessor(gradeHoraria.value.horarios, itensDoProfessor.value, aulasVisiveis.value)
+    : null
 )
 const fechadosDaVisao = computed(() =>
   turmaDaVisao.value
