@@ -191,6 +191,17 @@
               </div>
               <BCloseButton aria-label="Cancelar seleção" @click="limparSelecao" />
             </div>
+            <div v-if="sel.professores.length" class="d-flex flex-wrap gap-2 mt-2">
+              <BButton
+                v-for="p in sel.professores"
+                :key="p.id"
+                size="sm"
+                variant="outline-primary"
+                @click="abrirHorarioDoProfessor(p)"
+              >
+                {{ sel.professores.length > 1 ? `Horário de ${p.nome}` : 'Horário do professor' }}
+              </BButton>
+            </div>
             <p class="text-body-secondary mt-2 mb-2">
               <BSpinner v-if="simulando" small class="me-1" />
               {{
@@ -337,6 +348,29 @@
       <ul v-if="confirmacao.motivos.length" class="small mb-0">
         <li v-for="m in confirmacao.motivos" :key="m">{{ m }}</li>
       </ul>
+    </BModal>
+
+    <!-- Horário do professor da aula escolhida, só para consulta. -->
+    <BModal
+      v-model="horarioDoProfessor.visivel"
+      :title="`Horário de ${horarioDoProfessor.nome}`"
+      size="xl"
+      ok-only
+      ok-title="Fechar"
+      ok-variant="secondary"
+    >
+      <p class="small text-body-secondary mb-2">
+        {{ aulasDoProfessor.length }} aula(s) na semana neste horário.
+      </p>
+      <GradeSemanal
+        v-if="gradeHoraria && horarioDoProfessor.visivel"
+        :grade-horaria="gradeHoraria"
+        :aulas="aulasDoProfessor"
+        visao="professor"
+        :selecionada="selecao?.tipo === 'aula' ? selecao.aula.id : null"
+        :compacta="gradeCompacta"
+        :titulo="`Grade de ${horarioDoProfessor.nome}`"
+      />
     </BModal>
   </div>
 </template>
@@ -578,6 +612,17 @@ function daVisao(a) {
   return a.salaId === recursoId.value
 }
 const aulasVisiveis = computed(() => aulas.value.filter(daVisao))
+
+// ---------- Horário do professor (modal aberto pelo cartão da aula) ----------
+const horarioDoProfessor = reactive({ visivel: false, id: null, nome: '' })
+const aulasDoProfessor = computed(() =>
+  horarioDoProfessor.id === null
+    ? []
+    : aulas.value.filter((a) => a.professores.some((p) => p.id === horarioDoProfessor.id))
+)
+function abrirHorarioDoProfessor(professor) {
+  Object.assign(horarioDoProfessor, { visivel: true, id: professor.id, nome: professor.nome })
+}
 
 function rotuloHorario(horarioId) {
   const h = gradeHoraria.value?.horarios.find((x) => x.id === horarioId)
