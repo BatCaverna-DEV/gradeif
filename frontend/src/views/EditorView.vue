@@ -440,8 +440,8 @@ async function carregar() {
     atribuicoes.value = at.atribuicoes
     salas.value = s
     restricoes.value = r
-    if (!opcoesRecurso.value.some((o) => o.value === recursoId.value))
-      recursoId.value = opcoesRecurso.value[0]?.value ?? null
+    if (!itensRecurso.value.some((o) => o.value === recursoId.value))
+      recursoId.value = primeiraOpcao()
   } catch (e) {
     erro.value = mensagemDeErro(e)
   } finally {
@@ -465,7 +465,32 @@ const turmasDoHorario = computed(() => {
   return turmas.value.filter((t) => ids.has(t.id))
 })
 
-const opcoesRecurso = computed(() => {
+// Turno em que a turma aparece no seletor: o que tem mais aulas dela neste horário;
+// sem aulas, o primeiro turno permitido (na ordem da grade horária).
+const turnoPrincipal = computed(() => {
+  const ordem = (gradeHoraria.value?.turnos ?? []).map((t) => t.id)
+  const contagem = new Map() // turmaId → Map(turnoId → aulas)
+  for (const a of aulas.value) {
+    const turno = horarioPorId.value.get(a.horarioId)?.turnoId
+    if (turno === undefined) continue
+    if (!contagem.has(a.turmaId)) contagem.set(a.turmaId, new Map())
+    const daTurma = contagem.get(a.turmaId)
+    daTurma.set(turno, (daTurma.get(turno) ?? 0) + 1)
+  }
+  const mapa = new Map()
+  for (const t of turmasDoHorario.value) {
+    const porTurno = [...(contagem.get(t.id) ?? [])]
+    const comMaisAulas = porTurno.sort(
+      (x, y) => y[1] - x[1] || ordem.indexOf(x[0]) - ordem.indexOf(y[0])
+    )[0]?.[0]
+    const permitido = ordem.find((id) => (t.turnos ?? []).includes(id))
+    mapa.set(t.id, comMaisAulas ?? permitido ?? null)
+  }
+  return mapa
+})
+
+// Opções do seletor em lista simples (para achar o rótulo e a primeira opção).
+const itensRecurso = computed(() => {
   if (visao.value === 'turma')
     return turmasDoHorario.value.map((t) => ({ value: t.id, text: t.codigo }))
   if (visao.value === 'professor')
@@ -476,8 +501,22 @@ const opcoesRecurso = computed(() => {
       .map((t) => ({ value: t.id, text: t.nome }))
   return salas.value.filter((s) => s.ativa).map((s) => ({ value: s.id, text: s.nome }))
 })
+
+// Na visão por turma, as turmas vêm agrupadas por turno, na ordem da grade horária.
+const opcoesRecurso = computed(() => {
+  if (visao.value !== 'turma') return itensRecurso.value
+  const grupos = (gradeHoraria.value?.turnos ?? []).map((turno) => ({
+    label: turno.nome,
+    options: itensRecurso.value.filter((o) => turnoPrincipal.value.get(o.value) === turno.id),
+  }))
+  const semTurno = itensRecurso.value.filter((o) => turnoPrincipal.value.get(o.value) == null)
+  if (semTurno.length) grupos.push({ label: 'Sem turno', options: semTurno })
+  return grupos.filter((g) => g.options.length)
+})
+// A primeira opção como aparece no seletor (dentro dos grupos, se houver).
+const primeiraOpcao = () => opcoesRecurso.value.flatMap((o) => o.options ?? [o])[0]?.value ?? null
 const rotuloRecurso = computed(
-  () => opcoesRecurso.value.find((o) => o.value === recursoId.value)?.text ?? ''
+  () => itensRecurso.value.find((o) => o.value === recursoId.value)?.text ?? ''
 )
 const opcoesSala = computed(() => [
   { value: null, text: 'Sem sala' },
@@ -488,7 +527,7 @@ const opcoesSala = computed(() => [
 
 function trocarVisao(nova, id = null) {
   visao.value = nova
-  recursoId.value = id ?? opcoesRecurso.value[0]?.value ?? null
+  recursoId.value = id ?? primeiraOpcao()
 }
 
 watch([visao, recursoId], () => {
