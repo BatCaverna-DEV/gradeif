@@ -49,6 +49,8 @@
                     !paralelas(turno.id, d, tempo.ordem),
                   'celula-alvo': soltandoEm === horarioDe(turno.id, d, tempo.ordem),
                   'celula-fechada': fechada(turno.id, d, tempo.ordem),
+                  'celula-indisponivel': situacaoDe(turno.id, d, tempo.ordem) === 'indisponivel',
+                  'celula-evitar': situacaoDe(turno.id, d, tempo.ordem) === 'evitar',
                 },
                 classeNivel(turno.id, d, tempo.ordem),
               ]"
@@ -134,6 +136,10 @@ const props = defineProps({
   selecionada: { type: Number, default: null }, // id da aula selecionada
   // Marca as células em que o professor da aula selecionada está disponível.
   mostrarProfessor: { type: Boolean, default: false },
+  // Consulta do horário de um professor: horarioId → livre | evitar | indisponivel |
+  // ocupado (utils/disponibilidadeProfessor). Indisponível e "prefere evitar" ficam
+  // riscados (vermelho e amarelo); livre fica sem marca.
+  situacaoProfessor: { type: Map, default: null },
   // Cartões compactos: professor com nome abreviado e sala só quando houver.
   compacta: { type: Boolean, default: false },
   // Altura máxima (CSS) da área da grade; sem ela, a página rola normalmente.
@@ -169,7 +175,7 @@ function classeNivel(turno, dia, ordem) {
 const ROTULOS_PROFESSOR = {
   livre: 'Professor disponível',
   evitar: 'Professor disponível, mas prefere evitar este horário',
-  ocupado: 'Professor já tem aula neste horário',
+  ocupado: 'Professor já tem aula neste horário (ou num tempo que se cruza com ele)',
   indisponivel: 'Professor indisponível neste horário',
 }
 
@@ -181,10 +187,15 @@ function marcaProfessor(turno, dia, ordem) {
   return p === 'livre' || p === 'evitar' ? p : null
 }
 
+const situacaoDe = (turno, dia, ordem) =>
+  props.situacaoProfessor?.get(horarioDe(turno, dia, ordem)) ?? null
+
 const fechada = (turno, dia, ordem) => props.fechados.has(horarioDe(turno, dia, ordem))
 const AVISO_FECHADO = 'Turma indisponível neste horário (veja a disponibilidade da turma)'
 
 function dicaCelula(turno, dia, ordem) {
+  const situacao = situacaoDe(turno, dia, ordem)
+  if (situacao) return ROTULOS_PROFESSOR[situacao]
   const c = celulaDe(turno, dia, ordem)
   const aviso = fechada(turno, dia, ordem) ? [AVISO_FECHADO] : []
   if (!c) return aviso.length ? aviso[0] : undefined
@@ -441,6 +452,21 @@ function descricao(a) {
     rgba(var(--bs-secondary-rgb), 0.18) 6px 8px
   );
   cursor: not-allowed;
+}
+/* Professor indisponível (consulta do horário do professor): riscado, sem bloqueio. */
+.grade td.celula-indisponivel {
+  background-image: repeating-linear-gradient(
+    135deg,
+    transparent 0 6px,
+    rgba(var(--bs-danger-rgb), 0.16) 6px 8px
+  );
+}
+.grade td.celula-evitar {
+  background-image: repeating-linear-gradient(
+    135deg,
+    transparent 0 6px,
+    rgba(var(--bs-warning-rgb), 0.3) 6px 8px
+  );
 }
 .nivel-livre {
   background: var(--bs-success-bg-subtle);

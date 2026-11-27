@@ -162,6 +162,21 @@
                 <strong>{{ aulaSelecionada.sigla }} — {{ aulaSelecionada.disciplina }}</strong>
                 <BCloseButton aria-label="Fechar detalhe" @click="limparSelecao" />
               </div>
+              <div v-if="aulaSelecionada.professores.length" class="d-flex flex-wrap gap-2 my-2">
+                <BButton
+                  v-for="p in aulaSelecionada.professores"
+                  :key="p.id"
+                  size="sm"
+                  variant="outline-primary"
+                  @click="abrirHorarioDoProfessor(p)"
+                >
+                  {{
+                    aulaSelecionada.professores.length > 1
+                      ? `Horário de ${p.nome}`
+                      : 'Horário do professor'
+                  }}
+                </BButton>
+              </div>
               <div>Turma {{ aulaSelecionada.turma }}</div>
               <div>{{ aulaSelecionada.professores.map((p) => p.nome).join(', ') }}</div>
               <div>
@@ -200,11 +215,23 @@
         </BCol>
       </BRow>
     </template>
+
+    <!-- Horário do professor da aula escolhida, só para consulta. -->
+    <HorarioDoProfessor
+      v-if="gradeHoraria"
+      v-model="horarioDoProfessor.visivel"
+      :professor="horarioDoProfessor.professor"
+      :versao-id="id"
+      :grade-horaria="gradeHoraria"
+      :aulas="aulas"
+      :selecionada="aulaSelecionada?.id ?? null"
+      :compacta="gradeCompacta"
+    />
   </div>
 </template>
 
 <script setup>
-import { computed, ref, watch } from 'vue'
+import { computed, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import {
   BAlert,
@@ -224,6 +251,7 @@ import { usePeriodoStore } from '@/stores/periodo'
 import ControlesDaGrade from '@/components/ControlesDaGrade.vue'
 import EditorDoHorario from '@/components/EditorDoHorario.vue'
 import GradeSemanal from '@/components/GradeSemanal.vue'
+import HorarioDoProfessor from '@/components/HorarioDoProfessor.vue'
 import PainelViolacoes from '@/components/PainelViolacoes.vue'
 import { DIAS, formatarDataHora, formatarNumero } from '@/utils/formato'
 import { mapaDeIndisponiveis, temposFechados, turnosAbertos } from '@/utils/disponibilidadeTurma'
@@ -415,6 +443,12 @@ const violacoesDaAula = computed(() =>
     ? (avaliacao.value?.violacoes ?? []).filter((v) => v.aulas.includes(aulaSelecionada.value.id))
     : []
 )
+
+// ---------- Horário do professor (modal aberto pelo cartão da aula) ----------
+const horarioDoProfessor = reactive({ visivel: false, professor: null })
+function abrirHorarioDoProfessor(professor) {
+  Object.assign(horarioDoProfessor, { visivel: true, professor })
+}
 
 function rotuloHorario(horarioId) {
   const h = gradeHoraria.value?.horarios.find((x) => x.id === horarioId)
